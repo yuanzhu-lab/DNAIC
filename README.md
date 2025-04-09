@@ -78,9 +78,9 @@ Download link: [pretrained_models](https://pan.baidu.com/s/19h-6fc48hiyFZupPSf_v
 
 This project is based on the following open-source projects:
 
-- MSCOCO
-- mPLUG
-- EENAIC
+- MSCOCO - the dataset
+- mPLUG - the teacher model
+- EENAIC - the student model
 
 ## License
 
