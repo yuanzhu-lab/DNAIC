@@ -22,6 +22,8 @@ mscoco/
 |--txt/
 ```
 
+Download link: [mscoco](https://pan.baidu.com/s/1KSYMOxvs-W6brrgpsZI9Aw?pwd=rain)
+
 ## Pre-trained Models Preparation
 
 - Pre-trained models should be placed in the `pretrained_models/` directory
@@ -39,6 +41,8 @@ pretrained_models/
 |-- swin-large-patch4-window12-384/
     |-- swin_large_patch4_window12_384_22kto1k_no_head.pth
 ```
+
+Download link: [pretrained_models](https://pan.baidu.com/s/19h-6fc48hiyFZupPSf_vuQ?pwd=rain)
 
 ## Training Process
 
@@ -72,6 +76,11 @@ This project is based on the following open-source projects:
 - MSCOCO
 - mPLUG
 - EENAIC
+
+## Todo
+
+1. LightPASM
+2. Partial NAR
 
 ## License
 
