@@ -8,14 +8,14 @@ class DistillationLoss(nn.Module):
                  mapping_hidden_size=None, mapping_dropout=0.1,
                  ignore_index=-1):
         """
-        参数说明:
-          temperature: 温度因子
-          alpha: 硬标签与软标签损失的权重比
-          teacher_vocab_size: 教师词汇表尺寸（实际教师输出维度为 teacher_vocab_size - 1）
-          student_vocab_size: 学生词汇表尺寸
-          mapping_hidden_size: 映射网络隐藏层尺寸，默认值为 (input_dim + student_vocab_size)//2
-          mapping_dropout: 映射网络 dropout 概率
-          ignore_index: CrossEntropyLoss 忽略的标签值（应与数据预处理保持一致）
+        Parameters:
+          temperature: Temperature factor
+          alpha: Weight ratio between hard labels and soft labels loss
+          teacher_vocab_size: Teacher vocabulary size (actual teacher output dimension is teacher_vocab_size - 1)
+          student_vocab_size: Student vocabulary size
+          mapping_hidden_size: Hidden layer size of the mapping network, default value is (input_dim + student_vocab_size)//2
+          mapping_dropout: Dropout probability for the mapping network
+          ignore_index: Label value to ignore in CrossEntropyLoss (should be consistent with data preprocessing)
         """
         super(DistillationLoss, self).__init__()
         self.temperature = temperature
@@ -23,11 +23,11 @@ class DistillationLoss(nn.Module):
         self.ignore_index = ignore_index
         self.ce_criterion = nn.CrossEntropyLoss(ignore_index=self.ignore_index, reduction='mean')
         
-        assert teacher_vocab_size is not None and student_vocab_size is not None, "必须提供教师和学生的词汇表尺寸"
-        input_dim = teacher_vocab_size - 1  # 实际教师输出维度
+        assert teacher_vocab_size is not None and student_vocab_size is not None, "Teacher and student vocabulary sizes must be provided"
+        input_dim = teacher_vocab_size - 1  # Actual teacher output dimension
         hidden_dim = mapping_hidden_size if mapping_hidden_size is not None else ((input_dim + student_vocab_size) // 2)
         
-        # 两层前馈映射，含 ReLU 激活及 dropout
+        # Two-layer feedforward mapping with ReLU activation and dropout
         self.vocab_mapping = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(inplace=True),
@@ -37,14 +37,14 @@ class DistillationLoss(nn.Module):
     
     def forward(self, student_logits, teacher_logits, target):
         """
-        计算知识蒸馏损失，包含硬标签（交叉熵）和软标签（KL散度）两部分。
-        参数:
-          student_logits: 学生模型输出，形状 [B, T, student_vocab_size] 或 [B, student_vocab_size]
-          teacher_logits: 教师模型输出，形状 [B, T, teacher_vocab_size] 或 [B, teacher_vocab_size]
-          target: 目标标签，形状 [B, T] 或 [B]
+        Calculate knowledge distillation loss, including hard labels (cross entropy) and soft labels (KL divergence).
+        Parameters:
+          student_logits: Student model output, shape [B, T, student_vocab_size] or [B, student_vocab_size]
+          teacher_logits: Teacher model output, shape [B, T, teacher_vocab_size] or [B, teacher_vocab_size]
+          target: Target labels, shape [B, T] or [B]
         """
-        # ----------------- 硬标签损失 -----------------
-        # 与示例相同，先将 logits 和 target 展平
+        # ----------------- Hard Label Loss -----------------
+        # Same as the example, first flatten the logits and target
         if student_logits.dim() == 3:
             B, T, V = student_logits.size()
             student_logits_flat = student_logits.view(-1, V)
@@ -55,8 +55,8 @@ class DistillationLoss(nn.Module):
         
         hard_loss = self.ce_criterion(student_logits_flat, target_flat)
         
-        # ----------------- 教师输出映射 -----------------
-        # 将教师输出映射至学生词汇空间
+        # ----------------- Teacher Output Mapping -----------------
+        # Map teacher output to student vocabulary space
         if teacher_logits.dim() == 3:
             B, T, _ = teacher_logits.size()
             teacher_logits_flat = teacher_logits.view(-1, teacher_logits.size(-1))
@@ -65,14 +65,14 @@ class DistillationLoss(nn.Module):
         else:
             teacher_logits = self.vocab_mapping(teacher_logits)
         
-        # ----------------- 对齐教师和学生输出 -----------------
+        # ----------------- Align Teacher and Student Output -----------------
         if teacher_logits.dim() != student_logits.dim():
             if teacher_logits.dim() == 2 and student_logits.dim() == 3:
                 teacher_logits = teacher_logits.unsqueeze(1).expand(-1, student_logits.size(1), -1)
             elif teacher_logits.dim() == 3 and student_logits.dim() == 2:
                 teacher_logits = teacher_logits.mean(dim=1)
         
-        # ----------------- 软标签损失（KL散度） -----------------
+        # ----------------- Soft Label Loss (KL Divergence) -----------------
         student_log_probs = F.log_softmax(student_logits / self.temperature, dim=-1)
         teacher_probs = F.softmax(teacher_logits / self.temperature, dim=-1)
         if student_logits.dim() == 3:
