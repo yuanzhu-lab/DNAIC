@@ -74,13 +74,13 @@ Download link: [pretrained_models](https://pan.baidu.com/s/19h-6fc48hiyFZupPSf_v
 2. Evaluation Metrics
    - Image Captioning: BLEU, METEOR, ROUGE-L, CIDEr
 
-## Acknowledgments
+## Credits
 
 This project is based on the following open-source projects:
 
 - MSCOCO - the dataset
-- mPLUG - the teacher model
-- EENAIC - the student model
+- mPLUG - the teacher
+- EENAIC - the student
 
 ## License
 
