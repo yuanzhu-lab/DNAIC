@@ -2,7 +2,7 @@
 
 <div align="center">
 [![License](https://img.shields.io/github/license/yuanzhu/ImageCaptioning?label=License&style=flat&color=7e57c2)](./LICENSE)
-[![Contributors](https://img.shields.io/github/contributors/yuanzhu/ImageCaptioning?label=Contributors&style=flat&color=1e88e5)](https://github.com/yuanzhu/ImageCaptioning/graphs/contributors)
+[![Contributors](https://img.shields.io/github/contributors/yuanzhu/ImageCaptioning?label=Contributors&style=flat&color=1e88e5)]
 </div>
 
 ## Pipeline
