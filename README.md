@@ -1,9 +1,7 @@
 # Non-Autoregressive Image Captioning
 
 <div align="center">
-  <a href="./LICENSE">
-    <img src="https://img.shields.io/github/license/yuanzhu/ImageCaptioning?label=License&style=flat&color=7e57c2" alt="License">
-  </a>
+  <img src="https://img.shields.io/github/license/yuanzhu/ImageCaptioning?label=License&style=flat&color=7e57c2" alt="License">
   <img src="https://img.shields.io/github/contributors/yuanzhu/ImageCaptioning?label=Contributors&style=flat&color=1e88e5" alt="Contributors">
 </div>
 
