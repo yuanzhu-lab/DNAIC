@@ -77,11 +77,6 @@ This project is based on the following open-source projects:
 - mPLUG
 - EENAIC
 
-## Todo
-
-1. LightPASM
-2. Partial NAR
-
 ## License
 
 This project is licensed under the terms specified in [LICENSE](LICENSE).
