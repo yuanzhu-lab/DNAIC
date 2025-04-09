@@ -36,15 +36,8 @@ Download link: [mscoco](https://pan.baidu.com/s/1KSYMOxvs-W6brrgpsZI9Aw?pwd=rain
 ```bash
 pretrained_models/
 |-- bert-base-uncased/
-|   |-- config.json
-|   |-- pytorch_model.bin
-|   |-- special_tokens_map.json
-|   |-- tokenizer_config.json
-|   |-- vocab.txt
 |-- mplug/
-|   |-- mplug_base.pth
 |-- swin-large-patch4-window12-384/
-    |-- swin_large_patch4_window12_384_22kto1k_no_head.pth
 ```
 
 Download link: [pretrained_models](https://pan.baidu.com/s/19h-6fc48hiyFZupPSf_vuQ?pwd=rain)
