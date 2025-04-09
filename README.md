@@ -1,9 +1,9 @@
 # DNAIC
 
 <div align='center'>
-  <h4>
+  <h2>
     Distilled Non-Autoregressive Image Captioning
-  </h4>
+  </h2>
 </div>
 
 <div align='center'>
