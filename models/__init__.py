@@ -2,7 +2,7 @@ from .EENAIC import EENAIC
 from mplug import TeacherMPLUG
 
 __factory = {
-    'EENAIC': EENAIC,
+    'DNAIC': EENAIC,
     'transformer_ar': TeacherMPLUG,
     'transformer_nar': EENAIC,
     'mplug': TeacherMPLUG,

@@ -1,7 +1,8 @@
 *__pycache__*
-experiments/EENAIC/result
-experiments/EENAIC/snapshot
+experiments/result
+experiments/snapshot
 mscoco/*
 pretrained_models/*
 data/*
 .DS_Store
+log.txt

@@ -34,7 +34,7 @@ DATA_LOADER:
 
 ############################ MODEL ############################
 MODEL:
-  TYPE: 'EENAIC'
+  TYPE: 'DNAIC'
   TEACHER_TYPE: 'ar'  # 使用mPLUG作为教师模型
   STUDENT_TYPE: 'nar'  # 非自回归学生模型类型
   TEACHER_WEIGHTS: './pretrained_models/mplug/mplug_base.pth'  # 教师模型权重路径

@@ -59,7 +59,7 @@ Download link: [pretrained_models](https://pan.baidu.com/s/19h-6fc48hiyFZupPSf_v
 2. Training Command
 
    ```bash
-   bash experiments/EENAIC/train.sh
+   bash experiments/train.sh
    ```
 
 ## Evaluation
@@ -67,7 +67,7 @@ Download link: [pretrained_models](https://pan.baidu.com/s/19h-6fc48hiyFZupPSf_v
 1. Evaluation Script
 
    ```bash
-   bash experiments/EENAIC/eval.sh
+   bash experiments/eval.sh
    ```
 
 2. Evaluation Metrics
