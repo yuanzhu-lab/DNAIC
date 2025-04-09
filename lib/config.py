@@ -364,6 +364,8 @@ __C.SEED = -1.0
 
 __C.TEMP_DIR = './data/temp'
 
+os.makedirs(__C.TEMP_DIR, exist_ok=True)
+
 # Add knowledge distillation related configuration
 __C.MODEL.TEACHER_TYPE = ''  # Teacher model type
 __C.MODEL.STUDENT_TYPE = ''  # Student model type
