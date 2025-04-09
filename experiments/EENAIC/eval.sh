@@ -1,0 +1,1 @@
+python eval.py --folder ./experiments/EENAIC/ --resume 1

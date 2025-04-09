@@ -1,0 +1,7 @@
+*__pycache__*
+experiments/EENAIC/result
+experiments/EENAIC/snapshot
+mscoco/*
+pretrained_models/*
+data/*
+.DS_Store
