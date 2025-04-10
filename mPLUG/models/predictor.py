@@ -50,19 +50,48 @@ class TextGenerator(object):
        logger(logging.Logger): logger.
     """
 
-    def __init__(self, config, model):
+    def __init__(self,
+                 args,
+                 model,
+                 vocab=None,
+                 symbols=None,
+                 global_scorer=None,
+                 logger=None,
+                 dump_beam=""):
+        self.alpha = 0.6
+
+        self.logger = logger
+        # self.cuda = args.visible_gpus != '-1'
+        self.cuda = (torch.cuda.device_count() > 0)
+
+        self.args = args
         self.model = model
-        self.max_length = config["max_tokens"] if "max_tokens" in config else 30
-        self.min_length = config["min_length"] if "min_length" in config else 1
-        self.vocab_size = model.config.vocab_size
-        self.beam_size = config["beam_size"] if "beam_size" in config else 5
-        self.start_token = 101
-        self.bos_token = 101
-        self.eos_token = 102
-        self.pad_token = 0
-        
-    def get_init_seq(self, batch_size):
-        return torch.ones(batch_size, 1).long() * self.bos_token
+        #TODO  generator
+        #self.generator = self.model.generator
+        self.vocab = vocab
+        self.symbols = symbols
+        self.start_token = 101 #['[PAD]']
+        self.end_token = 102  #'[PAD]']
+
+        self.global_scorer = global_scorer
+        self.beam_size = args['beam_size']
+        self.min_length = args['min_length']
+        self.max_length = args['max_length']
+
+        self.dump_beam = dump_beam
+
+        # for debugging
+        self.beam_trace = self.dump_beam != ""
+        self.beam_accum = None
+
+
+
+        if self.beam_trace:
+            self.beam_accum = {
+                "predicted_ids": [],
+                "beam_parent_ids": [],
+                "scores": [],
+                "log_probs": []}
 
     def _build_target_tokens(self, pred):
         # vocab = self.fields["tgt"].vocab
@@ -97,113 +126,9 @@ class TextGenerator(object):
             with torch.no_grad():
                 return self._fast_translate_batch(encoder_inputs, self.max_length, min_length=self.min_length, do_sample=do_sample,out_size=out_size)
 
-    def translate_batch_scst(self, encoder_inputs, out_size=1):
-        """
-        Generate text sequences using beam search
-        """
-        encoder_hidden_states, encoder_attention_mask = encoder_inputs
-        batch_size = encoder_hidden_states.size(0)
-        
-        # Initialize beam search states
-        init_seq = self.get_init_seq(batch_size).to(encoder_hidden_states.device)
-        beam_size = min(self.beam_size, self.vocab_size - 1)
-        
-        # Expand encoder outputs for beam search
-        encoder_hidden_states = encoder_hidden_states.unsqueeze(1).expand(-1, beam_size, -1, -1)
-        encoder_hidden_states = encoder_hidden_states.contiguous().view(batch_size * beam_size, -1, encoder_hidden_states.size(-1))
-        encoder_attention_mask = encoder_attention_mask.unsqueeze(1).expand(-1, beam_size, -1)
-        encoder_attention_mask = encoder_attention_mask.contiguous().view(batch_size * beam_size, -1)
-        
-        # Execute beam search
-        all_beams = []
-        all_scores = []
-        
-        for b in range(batch_size):
-            beams = torch.ones(beam_size, 1).long().to(encoder_hidden_states.device) * self.bos_token
-            beam_scores = torch.zeros(beam_size, 1).to(encoder_hidden_states.device)
-            
-            for step in range(self.max_length - 1):
-                with torch.no_grad():
-                    b_encoder_hidden = encoder_hidden_states[b*beam_size:(b+1)*beam_size]
-                    b_encoder_mask = encoder_attention_mask[b*beam_size:(b+1)*beam_size]
-                    
-                    # Decoder forward pass
-                    outputs = self.model(
-                        input_ids=beams,
-                        encoder_hidden_states=b_encoder_hidden,
-                        encoder_attention_mask=b_encoder_mask,
-                        return_dict=True
-                    )
-                    
-                    # Get predictions for current time step
-                    logits = outputs.logits[:, -1, :]
-                    scores = F.log_softmax(logits, dim=-1)
-                    
-                    # Add current scores to accumulated scores
-                    next_scores = beam_scores + scores
-                    
-                    # Length penalty
-                    if step < self.min_length:
-                        next_scores[:, self.eos_token] = -1e10
-                    
-                    # Find next best tokens
-                    next_scores = next_scores.view(-1)
-                    next_words = torch.topk(next_scores, 2 * beam_size)[1]
-                    
-                    # Calculate new beams and scores
-                    next_beams = []
-                    next_beam_scores = []
-                    
-                    for idx, next_word in enumerate(next_words):
-                        beam_id = idx // self.vocab_size
-                        word_id = next_word % self.vocab_size
-                        
-                        # If EOS is reached, stop expanding
-                        if word_id == self.eos_token and beams[beam_id][-1] == self.eos_token:
-                            continue
-                            
-                        # Otherwise add to candidate list
-                        next_beam = torch.cat([beams[beam_id], word_id.unsqueeze(0)], dim=0)
-                        next_beams.append(next_beam)
-                        next_beam_scores.append(next_scores[next_word].unsqueeze(0))
-                        
-                        # Stop if enough candidates are found
-                        if len(next_beams) >= beam_size:
-                            break
-                            
-                    # Break beam search if no valid candidates
-                    if len(next_beams) == 0:
-                        break
-                    
-                    # Update beams and scores    
-                    beams = torch.stack(next_beams)
-                    beam_scores = torch.cat(next_beam_scores).unsqueeze(1)
-                    
-                    # Check if all beams have generated EOS
-                    if all(beams[:, -1] == self.eos_token):
-                        break
-            
-            # Add to batch results
-            all_beams.append(beams[:out_size])
-            
-            # Calculate sequence probabilities
-            beam_probs = F.softmax(beam_scores.view(-1), dim=0)
-            all_scores.append(beam_probs[:out_size])
-        
-        # Process return results
-        max_len = max([beam.size(0) for beams in all_beams for beam in beams])
-        padded_beams = []
-        
-        for beams in all_beams:
-            batch_beams = []
-            for beam in beams:
-                if beam.size(0) < max_len:
-                    padding = torch.ones(max_len - beam.size(0)).long().to(beam.device) * self.pad_token
-                    beam = torch.cat([beam, padding], dim=0)
-                batch_beams.append(beam)
-            padded_beams.append(torch.stack(batch_beams))
-            
-        return padded_beams, all_scores
+    def translate_batch_scst(self, encoder_inputs, do_sample=False, out_size=1):
+        return self._fast_translate_batch(encoder_inputs, self.max_length, min_length=self.min_length, do_sample=do_sample,out_size=out_size)
+
 
     def _fast_translate_batch(self,
                               encoder_inputs,

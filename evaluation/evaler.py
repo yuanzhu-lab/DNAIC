@@ -15,28 +15,34 @@ class Evaler(object):
         self,
         eval_ids,
         att_feats,
-        eval_annfile
+        eval_annfile,
+        image_size=384
     ):
         super(Evaler, self).__init__()
         self.vocab = utils.load_vocab(cfg.INFERENCE.VOCAB)
         
-        # 设置设备
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # Set up device
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+        else:
+            self.device = torch.device("cpu")
         
-        # './mscoco/txt/coco_val_image_id.txt'  Karpathy验证集  5K张图像
-        # './mscoco/txt/coco_test_image_id.txt' Karpathy测试集  5K张图像
-        # './mscoco/txt/coco_test4w_image_id.txt' MSCOCO在线测试集 4W张图像
+        # './mscoco/txt/coco_val_image_id.txt'  Karpathy validation set, 5K images
+        # './mscoco/txt/coco_test_image_id.txt' Karpathy test set, 5K images
+        # './mscoco/txt/coco_test4w_image_id.txt' MSCOCO online test set, 40K images
         
-        # 读取txt文件，读取的为image_ids的list
+        # Read txt file, which contains a list of image_ids
         # self.eval_ids = np.array(utils.load_ids(eval_ids))
         
-        # 端到端训练时，直接读取annotation的json文件，其中包含了图像id和路径
-        # 读取json文件，读取的为{image_id: image_path}的dict
+        # For end-to-end training, directly read the annotation json file, which contains image ids and paths
+        # Read json file, which contains a dict of {image_id: image_path}
         with open(eval_ids, 'r') as f:
             self.ids2path = json.load(f)           # dict {image_id: image_path}
             self.eval_ids = np.array(list(self.ids2path.keys()))  # array of str
         
-        self.eval_loader = data_loader.load_val(eval_ids, att_feats)
+        self.eval_loader = data_loader.load_val(eval_ids, att_feats, image_size=image_size)
         self.evaler = evaluation.create(cfg.INFERENCE.EVAL, eval_annfile)
         
     def __call__(self, model, rname):
@@ -48,7 +54,7 @@ class Evaler(object):
                 ids = self.eval_ids[indices]
                 att_feats = att_feats.to(self.device)
                 
-                # 检查模型是否有module属性
+                # Check if model has module attribute
                 if hasattr(model, 'module'):
                     out = model.module.decode(att_feats)
                 else:

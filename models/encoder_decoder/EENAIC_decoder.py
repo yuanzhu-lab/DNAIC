@@ -3,6 +3,56 @@ import torch.nn as nn
 from lib.config import cfg
 from lib.utils import get_clip_mat
 
+class LightPASM(nn.Module):
+    def __init__(self, embed_dim, seq_len):
+        super(LightPASM, self).__init__()
+        self.embed_dim = embed_dim
+        self.seq_len = seq_len
+        self.half_seq = seq_len // 2
+        
+        self.first_half_weights = nn.ParameterList([
+            nn.Parameter(torch.randn(embed_dim, embed_dim)) 
+            for _ in range(self.half_seq)
+        ])
+        self.first_half_bias = nn.ParameterList([
+            nn.Parameter(torch.zeros(embed_dim)) 
+            for _ in range(self.half_seq)
+        ])
+        
+        self.second_half_linear = nn.Linear(embed_dim, embed_dim)
+        
+    def forward(self, x):
+        batch_size = x.shape[0]
+        seq_len = x.shape[1]
+        
+        if seq_len != self.seq_len:
+            return x
+        
+        first_half_outputs = []
+        for i in range(self.half_seq):
+            pos_input = x[:, i, :]
+            pos_output = torch.matmul(pos_input, self.first_half_weights[i]) + self.first_half_bias[i]
+            first_half_outputs.append(pos_output.unsqueeze(1))
+        
+        first_half_tensor = torch.cat(first_half_outputs, dim=1)
+        
+        second_half_outputs = []
+        for i in range(self.half_seq, self.seq_len):
+            relative_idx = i - self.half_seq
+            if relative_idx < self.half_seq:
+                src_tensor = first_half_tensor[:, relative_idx, :]
+                pos_output = self.second_half_linear(src_tensor)
+                second_half_outputs.append(pos_output.unsqueeze(1))
+            else:
+                src_tensor = first_half_tensor[:, -1, :]
+                pos_output = self.second_half_linear(src_tensor)
+                second_half_outputs.append(pos_output.unsqueeze(1))
+        
+        second_half_tensor = torch.cat(second_half_outputs, dim=1)
+        
+        output = torch.cat([first_half_tensor, second_half_tensor], dim=1)
+        return output
+
 class Decoder_NA(nn.Module):
     def __init__(
         self, 
@@ -36,33 +86,31 @@ class Decoder_NA(nn.Module):
         )
         self.softmax = nn.Softmax(-1)
 
-        # 确定设备类型
         if torch.cuda.is_available():
             device = torch.device('cuda')
-        elif torch.backends.mps.is_available():
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
             device = torch.device('mps')
         else:
             device = torch.device('cpu')
-            
-        # 先转换为float32，再移动到指定设备
         self.w = torch.from_numpy(get_clip_mat(17, 144)).to(torch.float32).to(device)
         self.a_embed = nn.Linear(self.embed_dim+self.embed_dim, self.embed_dim)
         self.sigmoid = nn.Sigmoid()
         self.layernorm = nn.LayerNorm(self.embed_dim)
+        self.light_pasm = LightPASM(embed_dim=self.embed_dim, seq_len=cfg.MODEL.SEQ_LEN)
 
     def forward(self, encoder_out):   
         batch_size = encoder_out.shape[0]
         seq_len = cfg.MODEL.SEQ_LEN
         text_emb = self.img2text(encoder_out)
-        # vocab = self.word_embed(torch.arange(self.vocab_size).cuda())
         vocab = self.word_embed.weight
         word_prob = text_emb @ vocab.t()
         word_prob = self.softmax(word_prob)
         word_emb = text_emb + word_prob @ vocab
-        # 确保类型一致性
         w = self.w.to(word_emb.dtype)
         word_emb = torch.matmul(w.unsqueeze(0), word_emb)
-        x = word_emb
+        
+        x = self.light_pasm(word_emb)
+        
         for layer in self.layers:
             x, x_self = layer(x, encoder_out)
 
@@ -144,7 +192,6 @@ class MultiHeadSelfAttention(nn.Module):
         k = self.k_linear(k).view(B_, -1, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_linear(v).view(B_, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
-        # [B, nH, L, L] or [B, nH, L, M+1]
         attn = (q @ k.transpose(-2, -1)) * self.scale
         
         if mask is not None:

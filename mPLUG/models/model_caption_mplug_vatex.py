@@ -1,8 +1,8 @@
 from functools import partial
-from models.vit import VisionTransformer
-from models.modeling_mplug import BertConfig, BertModel, BertPrefixModel, FusionModel
-from models.visual_transformers import initialize_clip
-from models.predictor import TextGenerator
+from .vit import VisionTransformer
+from .modeling_mplug import BertConfig, BertModel, BertPrefixModel, FusionModel
+from .visual_transformers import initialize_clip
+from .predictor import TextGenerator
 
 import torch
 from torch import nn

@@ -14,7 +14,7 @@
 ## Pipeline
 
 <div align='center'>
-    <img src='pipeline.png' width=100%>
+    <img src='pipeline.svg' width=100%>
 </div>
 
 ## Data Preparation
@@ -41,14 +41,16 @@ Download link: [mscoco](https://pan.baidu.com/s/1KSYMOxvs-W6brrgpsZI9Aw?pwd=rain
 
 ```bash
 pretrained_models/
-|-- bert-base-uncased/
 |-- mplug/
 |-- swin-large-patch4-window12-384/
+|-- vit/
 ```
 
 Download link: [pretrained_models](https://pan.baidu.com/s/19h-6fc48hiyFZupPSf_vuQ?pwd=rain)
 
 ## Training Process
+
+The model can be trained on CUDA (MPS and CPU are not recommended). Training one epoch on A800-80GB takes approximately 1 hour.
 
 1. Environment Setup
 

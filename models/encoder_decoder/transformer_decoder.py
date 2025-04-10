@@ -10,11 +10,11 @@ class TransformerDecoder(nn.Module):
         self.vocab_size = vocab_size
         self.embed_dim = embed_dim
         
-        # 词嵌入层
+        # Word embedding layer
         self.word_embed = nn.Embedding(vocab_size, embed_dim)
         self.pos_encoder = PositionalEncoding(embed_dim, dropout)
         
-        # TransformerDecoder层
+        # TransformerDecoder layer
         decoder_layer = nn.TransformerDecoderLayer(
             d_model=embed_dim, 
             nhead=num_heads,
@@ -23,13 +23,13 @@ class TransformerDecoder(nn.Module):
         )
         self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=depth)
         
-        # 输出层
+        # Output layer
         self.out_layer = nn.Linear(embed_dim, vocab_size)
         
-        # 初始化
+        # Initialization
         self._init_weights()
         
-        # 用于自回归训练
+        # For autoregressive training
         self.register_buffer('causal_mask', self._generate_square_subsequent_mask(cfg.MODEL.SEQ_LEN))
         
     def _init_weights(self):
@@ -44,72 +44,72 @@ class TransformerDecoder(nn.Module):
         
     def forward(self, enc_output, seq=None):
         """
-        自回归解码器前向传播
-        enc_output: 编码器输出 [batch_size, feat_len, embed_dim]
-        seq: 输入序列 [batch_size, seq_len]
+        Autoregressive decoder forward pass
+        enc_output: encoder output [batch_size, feat_len, embed_dim]
+        seq: input sequence [batch_size, seq_len]
         """
         if seq is None:
-            # 推理时的自回归生成
+            # Autoregressive generation during inference
             return self._generate(enc_output)
             
-        # 训练时使用teacher forcing
-        # 准备目标序列，移除最后一个token用于输入，真实目标从第二个token开始
+        # Teacher forcing during training
+        # Prepare target sequence, remove last token for input, real target starts from second token
         tgt = seq[:, :-1]
-        # 词嵌入和位置编码
+        # Word embedding and positional encoding
         tgt_embed = self.word_embed(tgt) * math.sqrt(self.embed_dim)
         tgt_embed = self.pos_encoder(tgt_embed)
         
-        # 准备mask
+        # Prepare mask
         seq_len = tgt.size(1)
         tgt_mask = self.causal_mask[:seq_len, :seq_len].to(enc_output.device)
         
-        # 重排维度以匹配PyTorch Transformer的期望
+        # Reorder dimensions to match PyTorch Transformer expectations
         tgt_embed = tgt_embed.transpose(0, 1)  # [seq_len, batch_size, embed_dim]
         memory = enc_output.transpose(0, 1)    # [feat_len, batch_size, embed_dim]
         
-        # 应用解码器
+        # Apply decoder
         output = self.decoder(tgt_embed, memory, tgt_mask=tgt_mask)
-        # 重新转换回原始维度
+        # Convert back to original dimensions
         output = output.transpose(0, 1)  # [batch_size, seq_len, embed_dim]
         
-        # 输出层
+        # Output layer
         logits = self.out_layer(output)
         
         return logits
     
     def _generate(self, enc_output):
-        """推理时的自回归生成"""
+        """Autoregressive generation during inference"""
         batch_size = enc_output.size(0)
         device = enc_output.device
         
-        # 起始标记
+        # Start token
         curr_ids = torch.full((batch_size, 1), 0, dtype=torch.long, device=device)
         memory = enc_output.transpose(0, 1)
         
         outputs = []
         for step in range(cfg.MODEL.SEQ_LEN-1):
-            # 词嵌入
+            # Word embedding
             tgt_embed = self.word_embed(curr_ids) * math.sqrt(self.embed_dim)
             tgt_embed = self.pos_encoder(tgt_embed)
             
-            # 准备mask
+            # Prepare mask
             seq_len = curr_ids.size(1)
             tgt_mask = self.causal_mask[:seq_len, :seq_len].to(device)
             
-            # 应用解码器
+            # Apply decoder
             tgt_embed = tgt_embed.transpose(0, 1)
             output = self.decoder(tgt_embed, memory, tgt_mask=tgt_mask)
             output = output.transpose(0, 1)
             
-            # 最后一个时间步的输出
+            # Output of the last time step
             logits = self.out_layer(output[:, -1:])
             outputs.append(logits)
             
-            # 获取预测的下一个token
+            # Get predicted next token
             next_ids = logits.argmax(dim=-1)
             curr_ids = torch.cat([curr_ids, next_ids], dim=1)
         
-        # 拼接所有输出
+        # Concatenate all outputs
         logits = torch.cat(outputs, dim=1)
         return logits
 

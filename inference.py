@@ -37,14 +37,21 @@ class OnlineTester(object):
         with torch.no_grad():
             for _, (indices, att_feats) in enumerate(tqdm.tqdm(self.eval_loader)):
                 ids = self.eval_ids[indices]
-                att_feats = att_feats.cuda()
+                if torch.backends.mps.is_available():
+                    att_feats = att_feats.to("mps")
+                else:
+                    att_feats = att_feats.cuda()
                 att_feats = model.module.inference_pre(att_feats)
                 start.record()
                 out = model.module.inference(att_feats)
                 prob, seq = torch.max(out, -1)
                 end.record()
-                torch.cuda.synchronize()
-                all_time += start.elapsed_time(end)
+                if torch.backends.mps.is_available():
+                    # MPS does not support synchronize
+                    all_time += 0  # You may need to implement timing differently for MPS
+                else:
+                    torch.cuda.synchronize()
+                    all_time += start.elapsed_time(end)
                 
                 sents = utils.decode_sequence(self.vocab, seq.data)
                 sents = utils.clip_chongfu(sents)

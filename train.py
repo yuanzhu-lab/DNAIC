@@ -36,12 +36,18 @@ class DistillationTrainer(object):
             torch.manual_seed(cfg.SEED)
 
         # Check available devices
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+        else:
+            self.device = torch.device("cpu")
         print(f"Using device: {self.device}")
 
-        self.num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
-        self.distributed = self.num_gpus > 1 and torch.cuda.is_available()
-        if self.distributed:
+        # MPS does not support distributed training
+        self.distributed = False
+        if torch.cuda.is_available() and torch.cuda.device_count() > 1:
+            self.distributed = True
             torch.cuda.set_device(args.local_rank)
             torch.distributed.init_process_group(
                 backend="nccl", init_method="env://"
@@ -55,12 +61,14 @@ class DistillationTrainer(object):
         self.val_evaler = Evaler(
             eval_ids = cfg.DATA_LOADER.VAL_ID,
             att_feats = cfg.DATA_LOADER.VAL_ATT_FEATS,
-            eval_annfile = cfg.INFERENCE.VAL_ANNFILE
+            eval_annfile = cfg.INFERENCE.VAL_ANNFILE,
+            image_size = 384
         )
         self.test_evaler = Evaler(
             eval_ids = cfg.DATA_LOADER.TEST_ID,
             att_feats = cfg.DATA_LOADER.TEST_ATT_FEATS,
-            eval_annfile = cfg.INFERENCE.TEST_ANNFILE
+            eval_annfile = cfg.INFERENCE.TEST_ANNFILE,
+            image_size = 384
         )
         self.scorer = Scorer()
 
@@ -84,18 +92,36 @@ class DistillationTrainer(object):
         self.logger.info(pprint.pformat(cfg))
 
     def setup_dataset(self):
-        self.coco_set = datasets.coco_dataset.CocoDataset(
+        self.student_coco_set = datasets.coco_dataset.CocoDataset(
             image_ids_path = cfg.DATA_LOADER.TRAIN_ID,
             input_seq = cfg.DATA_LOADER.INPUT_SEQ_PATH,
             target_seq = cfg.DATA_LOADER.TARGET_SEQ_PATH,
             att_feats_folder = cfg.DATA_LOADER.TRAIN_ATT_FEATS,
             seq_per_img = cfg.DATA_LOADER.SEQ_PER_IMG,
-            max_feat_num = cfg.DATA_LOADER.MAX_FEAT
+            max_feat_num = cfg.DATA_LOADER.MAX_FEAT,
+            image_size = 384
         )
+        
+        self.teacher_coco_set = datasets.coco_dataset.CocoDataset(
+            image_ids_path = cfg.DATA_LOADER.TRAIN_ID,
+            input_seq = cfg.DATA_LOADER.INPUT_SEQ_PATH,
+            target_seq = cfg.DATA_LOADER.TARGET_SEQ_PATH,
+            att_feats_folder = cfg.DATA_LOADER.TRAIN_ATT_FEATS,
+            seq_per_img = cfg.DATA_LOADER.SEQ_PER_IMG,
+            max_feat_num = cfg.DATA_LOADER.MAX_FEAT,
+            image_size = 256
+        )
+        
+        self.coco_set = self.student_coco_set
 
     def setup_loader(self, epoch):
-        self.training_loader = datasets.data_loader.load_train(
-            self.distributed, epoch, self.coco_set)
+        self.student_loader = datasets.data_loader.load_train(
+            self.distributed, epoch, self.student_coco_set)
+        
+        self.teacher_loader = datasets.data_loader.load_train(
+            self.distributed, epoch, self.teacher_coco_set)
+        
+        self.training_loader = self.student_loader
 
     def setup_networks(self):
         # Set up teacher model (autoregressive)
@@ -200,15 +226,12 @@ class DistillationTrainer(object):
             student_vocab_size=student_vocab_size
         ).to(self.device)
 
-    def forward_distillation(self, att_feats, target_seq, input_seq=None):
-        # Get teacher model (autoregressive) output
+    def forward_distillation(self, student_att_feats, target_seq, input_seq=None, teacher_att_feats=None):
         with torch.no_grad():
-            teacher_logits = self.teacher_model(att_feats, input_seq)
+            teacher_logits = self.teacher_model(teacher_att_feats, input_seq)
         
-        # Get student model (non-autoregressive) output
-        student_logits = self.student_model(att_feats)
+        student_logits = self.student_model(student_att_feats)
         
-        # Calculate distillation loss
         loss = self.distillation_criterion(student_logits, teacher_logits, target_seq)
         return loss
 
@@ -230,14 +253,23 @@ class DistillationTrainer(object):
             self.setup_loader(epoch)
             self.logger.info(f"Data loader ready, total {len(self.training_loader)} batches")
             
+            teacher_data_iter = iter(self.teacher_loader)
+            
             running_loss = .0
-            with tqdm.tqdm(desc='Epoch %d - train' % epoch, unit='it', total=len(self.training_loader)) as pbar:
-                for batch_idx, (indices, input_seq, target_seq, att_feats) in enumerate(self.training_loader):
+            with tqdm.tqdm(desc='Epoch %d - train' % epoch, unit='it', total=len(self.student_loader)) as pbar:
+                for batch_idx, (indices, input_seq, target_seq, student_att_feats) in enumerate(self.student_loader):
+                    try:
+                        _, _, _, teacher_att_feats = next(teacher_data_iter)
+                    except StopIteration:
+                        teacher_data_iter = iter(self.teacher_loader)
+                        _, _, _, teacher_att_feats = next(teacher_data_iter)
+                    
                     input_seq = input_seq.to(self.device)
                     target_seq = target_seq.to(self.device)
-                    att_feats = att_feats.to(self.device)
+                    student_att_feats = student_att_feats.to(self.device)
+                    teacher_att_feats = teacher_att_feats.to(self.device)
 
-                    loss = self.forward_distillation(att_feats, target_seq, input_seq)
+                    loss = self.forward_distillation(student_att_feats, target_seq, input_seq, teacher_att_feats)
                     self.optim.zero_grad()
                     loss.backward()
                     utils.clip_gradient(self.optim.optimizer, self.student_model,
@@ -252,14 +284,14 @@ class DistillationTrainer(object):
                     
                     # Log every 100 batches
                     if (batch_idx + 1) % 100 == 0:
-                        self.logger.info(f"Epoch {epoch}, Batch {batch_idx+1}/{len(self.training_loader)}, Loss: {avg_loss:.4f}")
+                        self.logger.info(f"Epoch {epoch}, Batch {batch_idx+1}/{len(self.student_loader)}, Loss: {avg_loss:.4f}")
                     
                     iteration += 1
                     if self.distributed:
                         dist.barrier()
-                        
+            
             # Record average loss for each epoch
-            self.logger.info(f"Epoch {epoch} completed, average loss: {running_loss / len(self.training_loader):.4f}")
+            self.logger.info(f"Epoch {epoch} completed, average loss: {running_loss / len(self.student_loader):.4f}")
             
             self.save_model(epoch)
             val = self.eval(epoch)

@@ -13,9 +13,11 @@ class Tester(object):
     def __init__(self, args):
         super(Tester, self).__init__()
         self.args = args
-        # Check if CUDA is available
+        # Check available devices
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            self.device = torch.device("mps")
         else:
             self.device = torch.device("cpu")
         print(f"Using device: {self.device}")
@@ -34,7 +36,6 @@ class Tester(object):
 
     def setup_network(self):
         model = models.create(cfg.MODEL.TYPE)
-        print(model)
         if torch.cuda.is_available():
             self.model = torch.nn.DataParallel(model).cuda()
         else:

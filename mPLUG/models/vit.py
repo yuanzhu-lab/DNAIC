@@ -6,10 +6,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from functools import partial
 
-from timm.models.vision_transformer import _cfg, PatchEmbed
-from timm.models import register_model
-from timm.layers import trunc_normal_, DropPath
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning, module="timm")
 
+from timm.models.vision_transformer import _cfg, PatchEmbed
+from timm.models.registry import register_model
+from timm.models.layers import trunc_normal_, DropPath
 
 class Mlp(nn.Module):
     """ MLP as used in Vision Transformer, MLP-Mixer and related networks

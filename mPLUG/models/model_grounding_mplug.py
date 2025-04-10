@@ -11,13 +11,12 @@ from pickle import NONE, TRUE
 from turtle import forward
 
 from matplotlib.transforms import Transform
-from models.vit import VisionTransformer, interpolate_pos_embed
-from models.modeling_mplug import BertConfig, BertModel, BertPrefixModel,BertEncoder, BertPrefixModelForGrounding, FusionModel
-from models.visual_transformers import initialize_clip
+from transformers import BertTokenizer
 
 import torch
 import torch.nn.functional as F
 from torch import nn
+import torch.utils.checkpoint as checkpoint
 
 import numpy as np
 import random
@@ -25,6 +24,11 @@ from einops import repeat
 from vgTools.utils.box_utils import xywh2xyxy,generalized_box_iou
 from icecream import ic
 from mmdet.models.losses import smooth_l1_loss
+
+from .vit import VisionTransformer, interpolate_pos_embed
+from .modeling_mplug import BertConfig, BertModel, BertPrefixModel,BertEncoder, BertPrefixModelForGrounding, FusionModel
+from .visual_transformers import initialize_clip
+
 class MLP(nn.Module):
     """ Very simple multi-layer perceptron (also called FFN)"""
 
@@ -57,7 +61,7 @@ class MPLUG(nn.Module):
 
         self.visual_encoder, _ = initialize_clip(config)
         for module in self.visual_encoder.modules():
-            from models.clip.model import Transformer
+            from .clip.model import Transformer
             if isinstance(module,Transformer):
                 module.use_checkpoint = (config['vision_width'] == 1024)
 

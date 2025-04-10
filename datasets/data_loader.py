@@ -12,7 +12,7 @@ def sample_collate(batch):
     indices = np.stack(indices, axis=0).reshape(-1)
     input_seq = torch.cat([torch.from_numpy(b) for b in input_seq], 0)
     target_seq = torch.cat([torch.from_numpy(b) for b in target_seq], 0)
-    att_feats = torch.stack(att_feats, 0)  # [B, 3, 384, 384]
+    att_feats = torch.stack(att_feats, 0)
 
     return indices, input_seq, target_seq, att_feats
 
@@ -20,7 +20,7 @@ def sample_collate_val(batch):
     indices, att_feats = zip(*batch)
     
     indices = np.stack(indices, axis=0).reshape(-1)
-    att_feats = torch.stack(att_feats, 0)  # [B, 3, 384, 384]
+    att_feats = torch.stack(att_feats, 0)
 
     return indices, att_feats
 
@@ -42,14 +42,15 @@ def load_train(distributed, epoch, coco_set):
     )
     return loader
 
-def load_val(image_ids_path, att_feats_folder, test=0):
+def load_val(image_ids_path, att_feats_folder, test=0, image_size=384):
     coco_set = CocoDataset(
         image_ids_path = image_ids_path, 
         input_seq = None, 
         target_seq = None, 
         att_feats_folder = att_feats_folder,
         seq_per_img = 1, 
-        max_feat_num = cfg.DATA_LOADER.MAX_FEAT
+        max_feat_num = cfg.DATA_LOADER.MAX_FEAT,
+        image_size = image_size
     )
     if test==0:
         batch_size = cfg.TEST.BATCH_SIZE

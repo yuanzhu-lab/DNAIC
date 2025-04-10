@@ -35,23 +35,23 @@ DATA_LOADER:
 ############################ MODEL ############################
 MODEL:
   TYPE: 'DNAIC'
-  TEACHER_TYPE: 'ar'  # 使用mPLUG作为教师模型
-  STUDENT_TYPE: 'nar'  # 非自回归学生模型类型
-  TEACHER_WEIGHTS: './pretrained_models/mplug/mplug_base.pth'  # 教师模型权重路径
+  TEACHER_TYPE: 'ar'  # Use mPLUG as teacher model
+  STUDENT_TYPE: 'nar'  # Non-autoregressive student model type
+  TEACHER_WEIGHTS: './pretrained_models/mplug/mplug_base.pth'  # Teacher model weights path
   SEQ_LEN: 17                               # include <EOS>/<BOS>
   VOCAB_SIZE: 9487                          # exclude <EOS>/<BOS>
-  # 如果教师模型和学生模型的词汇表大小不同，可以分别指定
-  TEACHER_VOCAB_SIZE: 30522                # 教师模型词汇表大小（如果与VOCAB_SIZE不同）
-  STUDENT_VOCAB_SIZE: 9487                # 学生模型词汇表大小（如果与VOCAB_SIZE不同）
-  BACKBONE_WEIGHTS: './pretrained_models/swin-large-patch4-window12-384/swin_large_patch4_window12_384_22kto1k_no_head.pth'  # Swin Transformer骨干网络权重路径
+  # If teacher and student models have different vocabulary sizes, they can be specified separately
+  TEACHER_VOCAB_SIZE: 30522                # Teacher model vocabulary size (if different from VOCAB_SIZE)
+  STUDENT_VOCAB_SIZE: 9487                # Student model vocabulary size (if different from VOCAB_SIZE)
+  BACKBONE_WEIGHTS: './pretrained_models/swin-large-patch4-window12-384/swin_large_patch4_window12_384_22kto1k_no_head.pth'  # Swin Transformer backbone weights path
   
-  # mPLUG模型相关配置
+  # mPLUG model related configuration
   MPLUG:
     TEXT_ENCODER: "bert-base-uncased"
     TEXT_DECODER: "bert-base-uncased"
     BERT_CONFIG: "./mPLUG/configs/config_bert.json"
     VISION_WIDTH: 768
-    IMAGE_RES: 384
+    IMAGE_RES: 256
     PATCH_SIZE: 16
     USE_CHECKPOINT: True
     TOKENIZER_PATH: "bert-base-uncased"
@@ -165,5 +165,5 @@ INFERENCE:
 
 ############################ DISTILLATION ############################
 DISTILLATION:
-  TEMPERATURE: 4.0  # 蒸馏温度
-  ALPHA: 0.5  # 蒸馏损失权重（硬标签和软标签各50%）
+  TEMPERATURE: 4.0  # Distillation temperature
+  ALPHA: 0.5  # Distillation loss weight (50% hard labels and 50% soft labels)

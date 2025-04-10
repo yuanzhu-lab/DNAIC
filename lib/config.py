@@ -103,10 +103,16 @@ __C.MODEL.MPLUG.TEXT_ENCODER = "bert-base-uncased"
 __C.MODEL.MPLUG.TEXT_DECODER = "bert-base-uncased"
 __C.MODEL.MPLUG.BERT_CONFIG = "./mPLUG/configs/config_bert.json"
 __C.MODEL.MPLUG.VISION_WIDTH = 768
-__C.MODEL.MPLUG.IMAGE_RES = 384
+__C.MODEL.MPLUG.IMAGE_RES = 256
 __C.MODEL.MPLUG.PATCH_SIZE = 16
 __C.MODEL.MPLUG.USE_CHECKPOINT = True
 __C.MODEL.MPLUG.TOKENIZER_PATH = "bert-base-uncased"
+__C.MODEL.MPLUG.CLIP_MODEL_PATH = "pretrained_models/vit/ViT-B-16.tar"
+__C.MODEL.MPLUG.MAX_LENGTH = 20
+
+# Student model configuration for EENAIC
+__C.MODEL.EENAIC = edict()
+__C.MODEL.EENAIC.IMAGE_RES = 384
 
 # Add backbone network weights path configuration
 __C.MODEL.BACKBONE_WEIGHTS = './pretrained_models/swin-large-patch4-window12-384/swin_large_patch4_window12_384_22kto1k_no_head.pth'

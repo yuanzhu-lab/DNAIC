@@ -23,6 +23,9 @@ from transformers import BertTokenizer
 class TeacherMPLUG(MPLUG):
     def __init__(self):
         """Initialize TeacherMPLUG model"""
+        # First call the initialization method of nn.Module
+        nn.Module.__init__(self)
+        
         self.logger = logging.getLogger(cfg.LOGGER_NAME)
         self.logger.info("Initializing TeacherMPLUG model")
         
@@ -56,11 +59,42 @@ class TeacherMPLUG(MPLUG):
         # Build mPLUG configuration
         self.config = self.build_config()
         
-        # Call parent class initialization first
-        super().__init__(tokenizer=self.tokenizer, config=self.config)
+        # Initialize model components
+        self.module_setting(self.config)
         
-        # Load pretrained weights
-        self.load_pretrained_weights()
+        # Initialize visual encoder
+        self.visual_encoder, _ = initialize_clip(self.config)
+        
+        # Initialize text encoder, fusion encoder and text decoder
+        self.text_encoder = BertModel.from_pretrained(self.config['text_encoder'], config=self.config_encoder, add_pooling_layer=False)
+        self.fusion_encoder = FusionModel.from_pretrained(self.config['text_encoder'], config=self.config_fusion, add_pooling_layer=False)
+        self.text_decoder = BertPrefixModel.from_pretrained(self.config['text_decoder'], config=self.config_decoder)
+        
+        # Initialize beam search generator
+        self.beam_generator = TextGenerator(self.config, self.text_decoder)
+        
+        # Load pre-trained weights
+        if hasattr(cfg.MODEL, 'TEACHER_WEIGHTS') and cfg.MODEL.TEACHER_WEIGHTS:
+            self.load_pretrained_weights()
+    
+    def module_setting(self, config):
+        """Module settings"""
+        self.config_encoder = BertConfig.from_json_file(config['bert_config'])
+        self.config_encoder.num_hidden_layers = self.config_encoder.text_encoder_layers
+        self.config_fusion = BertConfig.from_json_file(config['bert_config'])
+        self.config_decoder = BertConfig.from_json_file(config['bert_config'])
+        self.config_decoder.add_cross_attention = True
+        self.config_decoder.num_hidden_layers = self.config_decoder.text_decode_layers
+        
+        self.large = False
+        if self.config_encoder.hidden_size != config['vision_width']:
+            self.visn_fc = nn.Linear(config['vision_width'], self.config_encoder.hidden_size)
+            self.visn_layer_norm = nn.LayerNorm(self.config_encoder.hidden_size, eps=1e-12)
+            self.dropout = nn.Dropout(self.config_encoder.hidden_dropout_prob)
+            self.large = True
+        
+        self.use_checkpoint = config["use_checkpoint"] if "use_checkpoint" in config else True
+        self.logger.info(f"use_checkpoint: {self.use_checkpoint}")
     
     def build_config(self):
         """Build mPLUG configuration"""
@@ -71,43 +105,37 @@ class TeacherMPLUG(MPLUG):
             'bert_config': os.path.join(mplug_path, 'configs/config_bert.json'),
             'vision_width': 768,
             'use_checkpoint': True,
-            'image_res': 384,
+            'image_res': 256,
             'patch_size': 16,
             'max_words': 30,
             'max_tokens': 30,
             'beam_size': 5,
             'min_length': 1,
+            'max_length': 20,
             'vit': 'base',
-            'clip_name': 'ViT-B-16',  # Add clip_name parameter to ensure consistency with original model
-            'distill': True  # Enable distillation mode
+            'clip_name': 'ViT-B-16',
+            'distill': True,
+            'clip_model_path': cfg.MODEL.MPLUG.CLIP_MODEL_PATH if hasattr(cfg.MODEL.MPLUG, 'CLIP_MODEL_PATH') else "pretrained_models/vit/ViT-B-16.tar"
         }
         
-        # If MPLUG configuration exists in config file, use those values
         if hasattr(cfg.MODEL, 'MPLUG'):
             for key in config:
                 if hasattr(cfg.MODEL.MPLUG, key.upper()):
                     config[key] = getattr(cfg.MODEL.MPLUG, key.upper())
         
+        # config['image_res'] = 256
+        
         self.logger.info(f"mPLUG configuration: {config}")
+        self.logger.info(f"Teacher model using image resolution: {config['image_res']}x{config['image_res']}")
         return config
     
     def forward(self, att_feats, seq=None, train=True, out_size=5):
-        """Forward propagation function
-        
-        Args:
-            att_feats: Image features
-            seq: Text sequence
-            train: Whether in training mode
-            out_size: Number of generated results
-            
-        Returns:
-            In training mode returns logits, in inference mode returns generated sequences and probabilities
-        """
+        """Forward propagation function"""
         # Convert image features to correct dtype
         image = att_feats.to(dtype=next(self.parameters()).dtype)
         
         # Get image features and attention mask
-        image_embeds = self.visual_encoder(image)
+        image_embeds = self.visual_encoder.visual(image, skip_last_layer=True, use_checkpoint=self.use_checkpoint)
         if self.large:
             image_embeds = self.dropout(self.visn_layer_norm(self.visn_fc(image_embeds)))
         image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
@@ -142,45 +170,59 @@ class TeacherMPLUG(MPLUG):
             topk_ids, topk_probs = self.generation(image_embeds, image_atts, out_size=out_size)
             return topk_ids, topk_probs
     
+    def beam_search(self, image, answer=None, train=True, out_size=5):
+        """Perform beam search generation"""
+        image_embeds = self.visual_encoder.visual(image, skip_last_layer=True)
+        if self.large:
+            image_embeds = self.dropout(self.visn_layer_norm(self.visn_fc(image_embeds)))
+        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
+        topk_ids, topk_probs = self.generation(image_embeds, image_atts, out_size=out_size)
+        return topk_ids, topk_probs
+    
+    def generation(self, question_states, question_atts, out_size=1):
+        """Generate text"""
+        encoder_inputs = [question_states, question_atts]
+        topk_ids, topk_probs = self.beam_generator.translate_batch_scst(encoder_inputs, out_size=out_size)  
+        return topk_ids, topk_probs
+    
     def load_pretrained_weights(self):
-        """Load pretrained weights"""
+        """Load pre-trained weights"""
         if hasattr(cfg.MODEL, 'TEACHER_WEIGHTS') and cfg.MODEL.TEACHER_WEIGHTS:
-            self.logger.info(f"Loading pretrained weights: {cfg.MODEL.TEACHER_WEIGHTS}")
+            self.logger.info(f"Loading pre-trained weights: {cfg.MODEL.TEACHER_WEIGHTS}")
             try:
                 # Load weight file
-                weights = torch.load(cfg.MODEL.TEACHER_WEIGHTS, map_location='cpu')
+                checkpoint = torch.load(cfg.MODEL.TEACHER_WEIGHTS, map_location='cpu')
                 
-                # Load weights for each model component
-                # Handle visual_encoder - not using from_pretrained method
-                if hasattr(weights, 'visual_encoder') and self.visual_encoder is not None:
-                    self.visual_encoder.load_state_dict(weights.visual_encoder)
-                elif 'visual_encoder' in weights and self.visual_encoder is not None:
-                    self.visual_encoder.load_state_dict(weights['visual_encoder'])
-                else:
-                    self.logger.warning("visual_encoder weights not found")
+                # Get state dictionary
+                try:
+                    state_dict = checkpoint['model']
+                except:
+                    state_dict = checkpoint.get('module', checkpoint)
                 
-                # Handle other components
-                for component_name in ['text_encoder', 'fusion_encoder', 'text_decoder']:
-                    component = getattr(self, component_name, None)
-                    if component is not None:
-                        if hasattr(weights, component_name):
-                            component.load_state_dict(weights[component_name])
-                        elif component_name in weights:
-                            component.load_state_dict(weights[component_name])
-                        else:
-                            self.logger.warning(f"{component_name} weights not found")
+                # Only load weights for visual encoder and text decoder
+                filtered_state_dict = {}
+                for key, value in state_dict.items():
+                    if key.startswith('visual_encoder') or key.startswith('text_decoder'):
+                        filtered_state_dict[key] = value
                 
-                self.logger.info("Successfully loaded pretrained weights")
+                # Load weights
+                msg = self.load_state_dict(filtered_state_dict, strict=False)
                 
-                # Verify weights are loaded correctly
-                self.verify_weights()
+                # Filter weight loading information, only keep visual encoder and text decoder related information
+                filtered_msg = {
+                    'missing_keys': [k for k in msg.missing_keys if k=='visual_encoder' or k=='text_decoder'],
+                    'unexpected_keys': [k for k in msg.unexpected_keys if k=='visual_encoder' or k=='text_decoder']
+                }
+                self.logger.info(f"Weight loading information: {filtered_msg}")
+                self.logger.info("Pre-trained weights loaded successfully")
+            
             except Exception as e:
                 self.logger.error(f"Error loading weights: {str(e)}")
                 import traceback
                 self.logger.error(traceback.format_exc())
         else:
-            self.logger.info("No pretrained weights specified, using random initialization")
-            
+            self.logger.info("No pre-trained weights specified, using random initialization")
+
     def verify_weights(self):
         """Verify weights are loaded correctly"""
         # Check if key components are initialized
@@ -205,21 +247,6 @@ class TeacherMPLUG(MPLUG):
         self.logger.info("Weight verification passed")
         return True
     
-    def beam_search(self, image, answer=None, train=True, out_size=5):
-        """Perform beam search generation, maintaining compatibility with original MPLUG"""
-        image_embeds = self.visual_encoder(image)
-        if self.large:
-            image_embeds = self.dropout(self.visn_layer_norm(self.visn_fc(image_embeds)))
-        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
-        topk_ids, topk_probs = self.generation(image_embeds, image_atts, out_size=out_size)
-        return topk_ids, topk_probs
-    
-    def generation(self, question_states, question_atts, out_size=1):
-        """Generate text"""
-        encoder_inputs = [question_states, question_atts]
-        topk_ids, topk_probs = self.beam_generator.translate_batch_scst(encoder_inputs, out_size=out_size)  
-        return topk_ids, topk_probs
-        
     # Add distillation related methods
     def init_distill(self, config):
         """Initialize distillation model"""

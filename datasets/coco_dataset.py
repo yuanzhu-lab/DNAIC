@@ -10,7 +10,6 @@ import json
 import cv2
 from PIL import Image
 
-# 图像读取预处理单元
 from torchvision import transforms
 from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from timm.data.transforms import str_to_pil_interp
@@ -23,21 +22,21 @@ class CocoDataset(data.Dataset):
         target_seq,
         att_feats_folder, 
         seq_per_img,
-        max_feat_num
+        max_feat_num,
+        image_size=384
     ):
         self.max_feat_num = max_feat_num
         self.seq_per_img = seq_per_img
-        # self.image_ids = utils.load_lines(image_ids_path)
-        # 此处image_ids_path为ids2path的映射dict
+        self.image_size = image_size
+
         with open(image_ids_path, 'r') as f:
-            self.ids2path = json.load(f)           # dict {image_id: image_path}
-            self.image_ids = list(self.ids2path.keys())  # list of str
+            self.ids2path = json.load(f)
+            self.image_ids = list(self.ids2path.keys())
         
         self.att_feats_folder = att_feats_folder if len(att_feats_folder) > 0 else None
 
-        # 构建图像预处理单元
         self.transform = transforms.Compose([
-            transforms.Resize((384, 384), interpolation=str_to_pil_interp('bicubic')),
+            transforms.Resize((self.image_size, self.image_size), interpolation=str_to_pil_interp('bicubic')),
             transforms.ToTensor(),
             transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)]
         )
@@ -66,7 +65,7 @@ class CocoDataset(data.Dataset):
             image_path = self.ids2path[image_id]
             img = cv2.imread(os.path.join(self.att_feats_folder, image_path))
             img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-            att_feats = self.transform(img)  # [3, 384, 384]，图像
+            att_feats = self.transform(img)
         else:
             att_feats = torch.zeros(1, 1)
         

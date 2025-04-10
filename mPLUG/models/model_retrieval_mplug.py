@@ -1,7 +1,7 @@
 from functools import partial
-from models.vit import VisionTransformer
-from models.modeling_mplug import BertConfig, BertModel, BertLMHeadModel, FusionModel
-from models.visual_transformers import initialize_clip
+from .vit import VisionTransformer
+from .modeling_mplug import BertConfig, BertModel, BertLMHeadModel, FusionModel
+from .visual_transformers import initialize_clip
 
 import torch
 from torch import nn

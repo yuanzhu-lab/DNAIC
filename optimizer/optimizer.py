@@ -34,13 +34,13 @@ class Optimizer(nn.Module):
             if "bias" in key:
                 lr = cfg.SOLVER.BASE_LR * cfg.SOLVER.BIAS_LR_FACTOR 
                 weight_decay = cfg.SOLVER.WEIGHT_DECAY_BIAS
-            # 此处添加的"initial_lr"是为了NoamOpt恢复Epoch的lr
+            # "initial_lr" is added here to restore epoch lr for NoamOpt
             params += [{"params": [value], "initial_lr": lr, "lr": lr, "weight_decay": weight_decay}]
         # """
-        # 学习参数
+        # Learning parameters
         params = model.parameters()
 
-        # 优化器设置
+        # Optimizer settings
         if cfg.SOLVER.TYPE == 'SGD':
             self.optimizer = torch.optim.SGD(
                 params, 
@@ -49,7 +49,7 @@ class Optimizer(nn.Module):
                 nesterov = True
             )
         elif cfg.SOLVER.TYPE == 'ADAM':
-            # 初始lr在scheduler为Noam时无效
+            # Initial lr is invalid when scheduler is Noam
             self.optimizer = torch.optim.Adam(
                 [{'params':params, 'initial_lr':0.00019}],
                 lr = cfg.SOLVER.BASE_LR,
@@ -85,7 +85,7 @@ class Optimizer(nn.Module):
         else:
             raise NotImplementedError
 
-        # 学习率策略设置
+        # Learning rate policy settings
         if cfg.SOLVER.LR_POLICY.TYPE == 'Fix':
             self.scheduler = None
         elif cfg.SOLVER.LR_POLICY.TYPE == 'Step':

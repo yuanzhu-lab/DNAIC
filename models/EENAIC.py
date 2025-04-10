@@ -14,8 +14,11 @@ class EENAIC(nn.Module):
         super(EENAIC, self).__init__()
         self.vocab_size = cfg.MODEL.VOCAB_SIZE + 1
         
+        img_size = cfg.MODEL.EENAIC.IMAGE_RES if hasattr(cfg.MODEL, 'EENAIC') and hasattr(cfg.MODEL.EENAIC, 'IMAGE_RES') else 384
+        print(f'Student model using image resolution: {img_size}x{img_size}')
+        
         self.backbone = STBackbone(
-            img_size=384, 
+            img_size=img_size, 
             embed_dim=192, 
             depths=[2, 2, 18, 2],
             num_heads=[6, 12, 24, 48],
@@ -32,8 +35,7 @@ class EENAIC(nn.Module):
             
             # Try to find weights file in different locations
             possible_paths = [
-                './pretrained_models/swin/swin_large_patch4_window12_384_22kto1k_no_head.pth',
-                '/Users/yuanzhu/Documents/MYWORK/CODE/MYWORK/pretrained_models/swin/swin_large_patch4_window12_384_22kto1k_no_head.pth'
+                './pretrained_models/swin/swin_large_patch4_window12_384_22kto1k_no_head.pth'
             ]
             
             for path in possible_paths:

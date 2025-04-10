@@ -14,8 +14,10 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, SmoothL1Loss
 import numpy as np
-from functools import partial
-from .vit import VisionTransformer
+
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from lib.config import cfg
 
 
 def resize_pos_embed(posemb, posemb_new):
@@ -39,55 +41,39 @@ def resize_pos_embed(posemb, posemb_new):
     return posemb
 
 
-def initialize_clip(config):
-    """
-    初始化CLIP视觉编码器。
-    """
-    vision_width = config['vision_width']
-    vision_model = VisionTransformer(
-        img_size=config['image_res'], 
-        patch_size=config['patch_size'], 
-        embed_dim=vision_width, 
-        depth=12, 
-        num_heads=12, 
-        mlp_ratio=4, 
-        qkv_bias=True,
-        drop_path_rate=0.
-    )
+def initialize_clip(config, num_patches=240):
+    from .clip import clip
     
-    return vision_model, vision_width
+    if "clip_model_path" in config:
+        clip_model_path = config["clip_model_path"]
+    elif hasattr(cfg.MODEL.MPLUG, 'CLIP_MODEL_PATH'):
+        clip_model_path = cfg.MODEL.MPLUG.CLIP_MODEL_PATH
+    else:
+        clip_model_path = "ViT-B-16.tar" if config["clip_name"] == "ViT-B-16" else "ViT-L-14.tar"
+    
+    if config["clip_name"] == "ViT-B-16":
+        clip_model, preprocess = clip.load(clip_model_path, jit=False)
+        num_patches = int(config['image_res']*config['image_res']/(16*16))
+        pos_embed = nn.Parameter(torch.zeros(num_patches + 1, 768).float())
+    elif config["clip_name"] == "ViT-L-14":
+        clip_model, preprocess = clip.load(clip_model_path, jit=False)
+        num_patches = int(config['image_res']*config['image_res']/(14*14))
+        pos_embed = nn.Parameter(torch.zeros(num_patches + 1, 1024).float())    
+    pos_embed.weight = resize_pos_embed(clip_model.visual.positional_embedding.unsqueeze(0), pos_embed.unsqueeze(0))
+    clip_model.visual.positional_embedding = pos_embed
+    return clip_model, preprocess
 
 
 def initialize_vit(VISUAL_CONFIG, model_type="ViT-B_32", pretrained_dir="data/ViT-B_32.npz", img_size=(384, 640),
                    num_patches=240):
-    # 使用本地的VisionTransformer实现
-    model = VisionTransformer(
-        img_size=224, 
-        patch_size=16, 
-        embed_dim=768, 
-        depth=12, 
-        num_heads=12, 
-        mlp_ratio=4, 
-        qkv_bias=True,
-        zero_head=True,
-        num_classes=1
-    )
-    
-    # 可以通过自定义方式加载预训练权重
-    if os.path.exists(pretrained_dir):
-        print(f"加载预训练权重: {pretrained_dir}")
-        state_dict = torch.load(pretrained_dir) if pretrained_dir.endswith('.pth') else np.load(pretrained_dir)
-        if isinstance(state_dict, np.ndarray):
-            # 处理numpy权重文件
-            pass
-        elif isinstance(state_dict, dict):
-            # 处理torch权重文件
-            model.load_state_dict(state_dict, strict=False)
-    
+    from vit.models.modeling import VisionTransformer, CONFIGS
+    config = CONFIGS[model_type]
+    model = VisionTransformer(config, img_size=224, zero_head=True, num_classes=1)
+    model.load_from(np.load(pretrained_dir))
+
     pos_embed = nn.Parameter(torch.zeros(num_patches + 1, 768).float())
-    if hasattr(model, 'pos_embed'):
-        pos_embed.weight = resize_pos_embed(model.pos_embed, pos_embed.unsqueeze(0))
-    
+    pos_embed.weight = resize_pos_embed(model.transformer.embeddings.position_embeddings, pos_embed.unsqueeze(0))
+    model.transformer.embeddings.position_embeddings = pos_embed
     if VISUAL_CONFIG.freeze_clip:
         for parameter in model.parameters():
             parameter.requires_grad = False
