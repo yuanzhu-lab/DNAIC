@@ -50,7 +50,7 @@ Download link: [pretrained_models](https://pan.baidu.com/s/19h-6fc48hiyFZupPSf_v
 
 ## Training Process
 
-The model can be trained on CUDA (MPS and CPU are not recommended). Training one epoch on A800-80GB takes approximately 1 hour.
+The model can be trained on NVIDIA GPU with CUDA support (recommended), while MPS (Apple Silicon) and CPU are not recommended, with training time of approximately 30 minutes per epoch on NVIDIA H20-200 GB GPU.
 
 1. Environment Setup
 
