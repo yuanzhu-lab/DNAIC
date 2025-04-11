@@ -158,8 +158,8 @@ INFERENCE:
   ID_KEY: 'image_id'
   CAP_KEY: 'caption'
   EVAL: 'COCO'
-  VAL_ANNFILE: './mscoco/misc/captions_val.json'
-  TEST_ANNFILE: './mscoco/misc/captions_test.json'
+  VAL_ANNFILE: './mscoco/misc/captions_val5k.json'
+  TEST_ANNFILE: './mscoco/misc/captions_test5k.json'
   BEAM_SIZE: 1
   GREEDY_DECODE: True
 
