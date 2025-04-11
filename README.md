@@ -78,6 +78,10 @@ The model can be trained on NVIDIA GPU with CUDA support or Apple Silicon with M
    - Image Captioning: BLEU, METEOR, ROUGE-L, CIDEr
    - Speed: Latency, SpeedUp
 
+| BLEU-1      | BLEU-2      | BLEU-3      | BLEU-4      | METEOR      | ROUGE-L     | CIDEr       |     
+| ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- |
+| 79.7        | 63.2        | 48.5        | 36.9        | 27.9        | 58.0        | 122.6       |
+
 ## Inference
 
 1. Inference Performance
