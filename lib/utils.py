@@ -7,6 +7,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from lib.config import cfg
 from torch.nn.utils.weight_norm import weight_norm
+import os
 
 # Add function to get device
 def get_device():
@@ -180,3 +181,116 @@ class AverageMeter(object):
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
+
+def load_model_weights(model, weight_path, device=None):
+    """
+    Unified model weight loading function to ensure consistent behavior across
+    training, evaluation, and inference.
+    
+    Args:
+        model: The model to load weights into
+        weight_path: Path to the weight file
+        device: Device to map weights to (cuda, mps, or cpu)
+    
+    Returns:
+        bool: True if weights were loaded successfully, False otherwise
+    """
+    if not os.path.exists(weight_path):
+        print(f"Weight file does not exist: {weight_path}")
+        return False
+    
+    try:
+        # Load weight file
+        weights = torch.load(weight_path, map_location=device, weights_only=True)
+        print(f"Successfully loaded weight file: {weight_path}")
+        
+        # Extract model weights if checkpoint contains more data
+        if isinstance(weights, dict) and "model" in weights:
+            print("Extracting model from complete checkpoint")
+            weights = weights["model"]
+        
+        # Handle module prefix
+        new_weights = {}
+        for k, v in weights.items():
+            if k.startswith('module.'):
+                name = k[7:]  # remove `module.`
+                new_weights[name] = v
+            else:
+                new_weights[k] = v
+        
+        # Get the actual model instance (remove DataParallel/DistributedDataParallel wrapper)
+        if hasattr(model, 'module'):
+            target_model = model.module
+        else:
+            target_model = model
+        
+        # Try loading the entire model
+        try:
+            model.load_state_dict(new_weights)
+            print("Model weights loaded successfully")
+            success = True
+        except Exception as e:
+            print(f"Full model loading failed: {e}")
+            
+            # Try loading with non-strict mode
+            try:
+                model.load_state_dict(new_weights, strict=False)
+                print("Model weights loaded in non-strict mode")
+                success = True
+            except Exception as e2:
+                print(f"Full model loading in non-strict mode failed: {e2}")
+                
+                # Try component-by-component loading
+                component_names = [name for name, _ in target_model.named_children()]
+                loaded_components = 0
+                
+                for component_name in component_names:
+                    component = getattr(target_model, component_name, None)
+                    if component is not None:
+                        # Extract weights for this component
+                        component_weights = {k.replace(f"{component_name}.", ''): v 
+                                           for k, v in new_weights.items() 
+                                           if k.startswith(f"{component_name}.")}
+                        
+                        if component_weights:
+                            try:
+                                component.load_state_dict(component_weights)
+                                print(f"Component {component_name} loaded successfully")
+                                loaded_components += 1
+                            except Exception as e:
+                                print(f"Component {component_name} loading failed: {e}")
+                                try:
+                                    component.load_state_dict(component_weights, strict=False)
+                                    print(f"Component {component_name} loaded in non-strict mode")
+                                    loaded_components += 1
+                                except Exception as e2:
+                                    print(f"Component {component_name} loading failed in non-strict mode: {e2}")
+                
+                success = loaded_components > 0
+                if loaded_components > 0:
+                    print(f"Successfully loaded {loaded_components}/{len(component_names)} components")
+                else:
+                    print("Failed to load any components")
+        
+        # Verify model weights
+        has_errors = False
+        for name, param in target_model.named_parameters():
+            if torch.isnan(param).any():
+                print(f"Parameter {name} contains NaN values")
+                has_errors = True
+            if torch.isinf(param).any():
+                print(f"Parameter {name} contains infinite values")
+                has_errors = True
+        
+        if not has_errors:
+            print("Weight verification passed, all parameters are normal")
+        else:
+            print("Warning: Weight verification failed, some parameters contain NaN or infinite values")
+            
+        return success
+    
+    except Exception as e:
+        print(f"Error loading weight file: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return False

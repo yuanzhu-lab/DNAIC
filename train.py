@@ -1,29 +1,26 @@
-import os
-import sys
-import pprint
-import random
-import time
-import tqdm
-import logging
-import argparse
-import numpy as np
-import torch
-import torch.nn as nn
-import torch.distributed as dist
-
-import losses
-import models
-import datasets
-import lib.utils as utils
 from optimizer.optimizer import Optimizer
 from evaluation.evaler import Evaler
 from scorer.scorer import Scorer
 from lib.config import cfg, cfg_from_file
 from losses.distillation_loss import DistillationLoss
+from transformers import BertModel
+
+import os
+import sys
+import pprint
+import random
+import tqdm
+import logging
+import argparse
+import numpy as np
+import torch
+import torch.distributed as dist
+import models
+import datasets
+import lib.utils as utils
 import warnings
 warnings.filterwarnings("ignore")
 
-from transformers import BertModel
 BertModel.from_pretrained("bert-base-uncased")
 
 class DistillationTrainer(object):
@@ -142,19 +139,8 @@ class DistillationTrainer(object):
             self.logger.info("Using Data Parallel (DP) to wrap teacher model")
             teacher_model = teacher_model.to_empty(device=self.device)
             self.teacher_model = torch.nn.DataParallel(teacher_model)
-        
-        # Load teacher model weights - handled in ARTeacher class
-        if os.path.exists(cfg.MODEL.TEACHER_WEIGHTS):
-            self.logger.info(f"Teacher model weight file exists at: {cfg.MODEL.TEACHER_WEIGHTS}")
-            print("Teacher model weight file exists at:", cfg.MODEL.TEACHER_WEIGHTS)
-        else:
-            self.logger.warning(f"Warning: Teacher model weight file {cfg.MODEL.TEACHER_WEIGHTS} does not exist!")
-            print(f"Warning: Teacher model weight file {cfg.MODEL.TEACHER_WEIGHTS} does not exist!")
-        
-        self.teacher_model.eval()  # Set to evaluation mode
-        self.logger.info("Teacher model set to evaluation mode")
 
-        # Set up student model (non-autoregressive)
+        # Set up student model
         self.logger.info("Starting to create student model")
         student_model = models.create(cfg.MODEL.STUDENT_TYPE)
         self.logger.info(f"Student model type: {cfg.MODEL.STUDENT_TYPE}")
@@ -178,23 +164,13 @@ class DistillationTrainer(object):
             self.logger.info(f"Loading student model checkpoint: {checkpoint_path}")
             print(f"Loading student model checkpoint: {checkpoint_path}")
             
-            try:
-                checkpoint = torch.load(checkpoint_path, map_location=self.device)
-                self.logger.info("Successfully loaded student model checkpoint file")
-                
-                # Handle checkpoint format
-                if "model" in checkpoint:
-                    self.logger.info("Extracting model part from complete checkpoint")
-                    self.student_model.load_state_dict(checkpoint["model"])
-                else:
-                    self.logger.info("Loading model weights directly")
-                    self.student_model.load_state_dict(checkpoint)
-                
+            success = utils.load_model_weights(self.student_model, checkpoint_path, self.device)
+            if success:
                 self.logger.info("Student model loaded successfully")
                 print("Student model loaded successfully")
-            except Exception as e:
-                self.logger.error(f"Error loading student model: {str(e)}")
-                print(f"Error loading student model: {str(e)}")
+            else:
+                self.logger.error("Failed to load student model weights")
+                print("Failed to load student model weights")
 
             if self.args.load_epoch:
                 self.load_epoch = self.args.resume - 1

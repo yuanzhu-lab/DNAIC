@@ -1,11 +1,12 @@
+from evaluation.evaler import Evaler
+from lib.config import cfg, cfg_from_file
+
 import os
 import sys
 import argparse
 import torch
-import torch.nn as nn
 import models
-from evaluation.evaler import Evaler
-from lib.config import cfg, cfg_from_file
+import lib.utils as utils
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -45,74 +46,11 @@ class Tester(object):
             model_path = self.snapshot_path("student_model", self.args.resume)
             print(f"Loading model: {model_path}")
             
-            try:
-                # Load weight file
-                weights = torch.load(model_path, map_location=self.device)
-                
-                # Load model weights component by component
-                if hasattr(self.model, 'module'):
-                    target_model = self.model.module
-                else:
-                    target_model = self.model
-                
-                # Get all component names of the model
-                component_names = [name for name, _ in target_model.named_children()]
-                
-                # Handle weight prefix issues
-                new_weights = {}
-                for k, v in weights.items():
-                    # Remove "module." prefix
-                    if k.startswith('module.'):
-                        name = k[7:]  # remove `module.`
-                        new_weights[name] = v
-                    else:
-                        new_weights[k] = v
-                
-                # Load weights for each component separately
-                loaded_components = 0
-                for component_name in component_names:
-                    component = getattr(target_model, component_name, None)
-                    if component is not None:
-                        # Extract weights for this component
-                        component_weights = {k.replace(f"{component_name}.", ''): v 
-                                            for k, v in new_weights.items() 
-                                            if k.startswith(f"{component_name}.")}
-                        
-                        if component_weights:
-                            try:
-                                component.load_state_dict(component_weights)
-                                print(f"Component {component_name} weights loaded successfully")
-                                loaded_components += 1
-                            except Exception as e:
-                                print(f"Component {component_name} weight loading failed: {e}")
-                                try:
-                                    component.load_state_dict(component_weights, strict=False)
-                                    print(f"Component {component_name} weights loaded successfully in non-strict mode")
-                                    loaded_components += 1
-                                except Exception as e2:
-                                    print(f"Component {component_name} weight loading failed even in non-strict mode: {e2}")
-                
-                # If no components were successfully loaded, try loading the entire model
-                if loaded_components == 0:
-                    print("Failed to load any components, attempting to load entire model")
-                    try:
-                        self.model.load_state_dict(new_weights)
-                        print("Entire model loaded successfully")
-                    except Exception as e:
-                        print(f"Entire model loading failed: {e}")
-                        try:
-                            self.model.load_state_dict(new_weights, strict=False)
-                            print("Entire model loaded successfully in non-strict mode")
-                        except Exception as e2:
-                            print(f"Entire model loading failed even in non-strict mode: {e2}")
-                
-                # Verify if weights are loaded correctly
-                self.verify_model_weights()
-                
-            except Exception as e:
-                print(f"Error loading weight file: {e}")
-                import traceback
-                print(traceback.format_exc())
+            success = utils.load_model_weights(self.model, model_path, self.device)
+            if success:
+                print("Model loaded successfully")
+            else:
+                print("Failed to load model weights")
     
     def verify_model_weights(self):
         """Verify if weights are loaded correctly"""

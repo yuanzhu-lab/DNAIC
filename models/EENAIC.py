@@ -15,7 +15,7 @@ class EENAIC(nn.Module):
         self.vocab_size = cfg.MODEL.VOCAB_SIZE + 1
         
         img_size = cfg.MODEL.EENAIC.IMAGE_RES if hasattr(cfg.MODEL, 'EENAIC') and hasattr(cfg.MODEL.EENAIC, 'IMAGE_RES') else 384
-        print(f'Student model using image resolution: {img_size}x{img_size}')
+        # print(f'Student model using image resolution: {img_size}x{img_size}')
         
         self.backbone = STBackbone(
             img_size=img_size, 

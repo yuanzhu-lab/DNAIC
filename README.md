@@ -50,9 +50,11 @@ Download link: [pretrained_models](https://pan.baidu.com/s/19h-6fc48hiyFZupPSf_v
 
 ## Training Process
 
-The model can be trained on NVIDIA GPU with CUDA support (recommended), while MPS (Apple Silicon) and CPU are not recommended. On an NVIDIA H20-200GB GPU, each training epoch takes approximately 30 minutes.
+The model can be trained on NVIDIA GPU with CUDA support or Apple Silicon with MPS support (CPUs are not recommended).
 
 1. Environment Setup
+
+   Python 3.12
 
    ```bash
    pip install -r requirements.txt
@@ -74,6 +76,23 @@ The model can be trained on NVIDIA GPU with CUDA support (recommended), while MP
 
 2. Evaluation Metrics
    - Image Captioning: BLEU, METEOR, ROUGE-L, CIDEr
+   - Speed: Latency, SpeedUp
+
+## Inference
+
+1. Inference Performance
+
+   ```bash
+   bash experiments/inference.sh
+   ```
+
+2. WebUI
+
+   A Gradio-based web UI is also provided for users to perform inference through a graphical interface.
+
+   ```py
+   python webui.py
+   ```
 
 ## Credits
 

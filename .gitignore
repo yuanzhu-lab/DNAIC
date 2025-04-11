@@ -6,3 +6,4 @@ pretrained_models/*
 data/*
 .DS_Store
 log.txt
+.gradio/*

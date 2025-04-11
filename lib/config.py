@@ -375,7 +375,7 @@ os.makedirs(__C.TEMP_DIR, exist_ok=True)
 # Add knowledge distillation related configuration
 __C.MODEL.TEACHER_TYPE = ''  # Teacher model type
 __C.MODEL.STUDENT_TYPE = ''  # Student model type
-__C.MODEL.TEACHER_WEIGHTS = ''  # Teacher model weights path
+__C.MODEL.TEACHER_WEIGHTS = 'pretrained_models/mplug/mplug_base.pth'  # Teacher model weights path
 __C.MODEL.TEACHER_VOCAB_SIZE = -1  # Teacher model vocabulary size
 __C.MODEL.STUDENT_VOCAB_SIZE = -1  # Student model vocabulary size
 

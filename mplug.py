@@ -1,65 +1,53 @@
-import os
-import sys
-import logging
-import torch
-import torch.nn.functional as F
 from lib.config import cfg
-import lib.utils as utils
-import torch.nn as nn
-
-# Add mPLUG directory to system path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-mplug_path = os.path.join(current_dir, 'mPLUG')
-if mplug_path not in sys.path:
-    sys.path.append(mplug_path)
-
-# Import mPLUG related modules
 from mPLUG.models.model_caption_mplug import MPLUG
 from mPLUG.models.modeling_mplug import BertConfig, BertModel, BertPrefixModel, FusionModel
 from mPLUG.models.visual_transformers import initialize_clip
 from mPLUG.models.predictor import TextGenerator
 from transformers import BertTokenizer
+from torchvision import transforms
+from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+from timm.data.transforms import str_to_pil_interp
+from PIL import Image
+
+import os
+import sys
+import logging
+import torch
+import torch.nn as nn
+import warnings
+warnings.filterwarnings('ignore')
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+mplug_path = os.path.join(current_dir, 'mPLUG')
+if mplug_path not in sys.path:
+    sys.path.append(mplug_path)
 
 class TeacherMPLUG(MPLUG):
     def __init__(self):
         """Initialize TeacherMPLUG model"""
-        # First call the initialization method of nn.Module
         nn.Module.__init__(self)
         
         self.logger = logging.getLogger(cfg.LOGGER_NAME)
         self.logger.info("Initializing TeacherMPLUG model")
         
-        # Initialize tokenizer
+        # Initialize gradient_checkpointing attribute
+        self.gradient_checkpointing = False
+        
+        # Load tokenizer
         tokenizer_path = cfg.MODEL.MPLUG.TOKENIZER_PATH if hasattr(cfg.MODEL, 'MPLUG') and hasattr(cfg.MODEL.MPLUG, 'TOKENIZER_PATH') else "bert-base-uncased"
         try:
-            self.tokenizer = BertTokenizer.from_pretrained(tokenizer_path, local_files_only=False)
+            self.tokenizer = BertTokenizer.from_pretrained(tokenizer_path)
             self.logger.info(f"Using tokenizer: {tokenizer_path}")
-        except OSError as e:
-            self.logger.warning(f"Failed to load tokenizer online: {e}")
-            self.logger.info("Attempting to load tokenizer offline...")
-            try:
-                # Try loading from local path
-                local_tokenizer_path = os.path.join(current_dir, 'pretrained_models', 'bert-base-uncased')
-                if os.path.exists(local_tokenizer_path):
-                    self.tokenizer = BertTokenizer.from_pretrained(local_tokenizer_path, local_files_only=True)
-                    self.logger.info(f"Loaded tokenizer from local path: {local_tokenizer_path}")
-                else:
-                    raise OSError(f"Local path {local_tokenizer_path} does not exist")
-            except Exception as e2:
-                self.logger.error(f"Failed to load tokenizer: {e2}")
-                self.logger.info("Please manually download bert-base-uncased model to pretrained_models directory or ensure network connection is available")
-                raise
+        except Exception as e:
+            local_tokenizer_path = os.path.join(current_dir, 'pretrained_models', 'bert-base-uncased')
+            self.tokenizer = BertTokenizer.from_pretrained(local_tokenizer_path, local_files_only=True)
+            self.logger.info(f"Loaded tokenizer from local path: {local_tokenizer_path}")
         
         # Set vocabulary size
-        if hasattr(cfg.MODEL, 'TEACHER_VOCAB_SIZE'):
-            self.vocab_size = cfg.MODEL.TEACHER_VOCAB_SIZE + 1
-        else:
-            self.vocab_size = cfg.MODEL.VOCAB_SIZE + 1
+        self.vocab_size = (cfg.MODEL.TEACHER_VOCAB_SIZE if hasattr(cfg.MODEL, 'TEACHER_VOCAB_SIZE') else cfg.MODEL.VOCAB_SIZE) + 1
         
-        # Build mPLUG configuration
+        # Build configuration and initialize model components
         self.config = self.build_config()
-        
-        # Initialize model components
         self.module_setting(self.config)
         
         # Initialize visual encoder
@@ -93,7 +81,7 @@ class TeacherMPLUG(MPLUG):
             self.dropout = nn.Dropout(self.config_encoder.hidden_dropout_prob)
             self.large = True
         
-        self.use_checkpoint = config["use_checkpoint"] if "use_checkpoint" in config else True
+        self.use_checkpoint = config.get("use_checkpoint", True)
         self.logger.info(f"use_checkpoint: {self.use_checkpoint}")
     
     def build_config(self):
@@ -115,44 +103,41 @@ class TeacherMPLUG(MPLUG):
             'vit': 'base',
             'clip_name': 'ViT-B-16',
             'distill': True,
-            'clip_model_path': cfg.MODEL.MPLUG.CLIP_MODEL_PATH if hasattr(cfg.MODEL.MPLUG, 'CLIP_MODEL_PATH') else "pretrained_models/vit/ViT-B-16.tar"
+            'clip_model_path': cfg.MODEL.MPLUG.CLIP_MODEL_PATH if hasattr(cfg.MODEL, 'MPLUG') and hasattr(cfg.MODEL.MPLUG, 'CLIP_MODEL_PATH') else "pretrained_models/vit/ViT-B-16.tar"
         }
         
+        # Override default configuration with cfg configuration
         if hasattr(cfg.MODEL, 'MPLUG'):
             for key in config:
                 if hasattr(cfg.MODEL.MPLUG, key.upper()):
                     config[key] = getattr(cfg.MODEL.MPLUG, key.upper())
         
-        # config['image_res'] = 256
-        
         self.logger.info(f"mPLUG configuration: {config}")
-        self.logger.info(f"Teacher model using image resolution: {config['image_res']}x{config['image_res']}")
         return config
     
     def forward(self, att_feats, seq=None, train=True, out_size=5):
         """Forward propagation function"""
-        # Convert image features to correct dtype
+        # Convert image features to correct data type
         image = att_feats.to(dtype=next(self.parameters()).dtype)
         
         # Get image features and attention mask
-        image_embeds = self.visual_encoder.visual(image, skip_last_layer=True, use_checkpoint=self.use_checkpoint)
+        image_embeds = self.visual_encoder.visual(image, skip_last_layer=True, use_checkpoint=self.gradient_checkpointing)
         if self.large:
             image_embeds = self.dropout(self.visn_layer_norm(self.visn_fc(image_embeds)))
         image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
         
         if train and seq is not None:
-            # Training mode - using teacher forcing
-            # seq is already in tensor form, no need to convert
+            # Training mode - use teacher forcing
             answer = seq
             
-            # Create attention_mask (1 for non-padding positions)
+            # Create attention mask
             attention_mask = (answer != self.tokenizer.pad_token_id).long()
             
             # Create target tensor, set padding positions to -100
             answer_targets = answer.clone()
             answer_targets[answer == self.tokenizer.pad_token_id] = -100
             
-            # Call text_decoder
+            # Call text decoder
             answer_output = self.text_decoder(
                 answer, 
                 attention_mask=attention_mask, 
@@ -172,7 +157,7 @@ class TeacherMPLUG(MPLUG):
     
     def beam_search(self, image, answer=None, train=True, out_size=5):
         """Perform beam search generation"""
-        image_embeds = self.visual_encoder.visual(image, skip_last_layer=True)
+        image_embeds = self.visual_encoder.visual(image, skip_last_layer=True, use_checkpoint=self.gradient_checkpointing)
         if self.large:
             image_embeds = self.dropout(self.visn_layer_norm(self.visn_fc(image_embeds)))
         image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
@@ -187,67 +172,35 @@ class TeacherMPLUG(MPLUG):
     
     def load_pretrained_weights(self):
         """Load pre-trained weights"""
-        if hasattr(cfg.MODEL, 'TEACHER_WEIGHTS') and cfg.MODEL.TEACHER_WEIGHTS:
-            self.logger.info(f"Loading pre-trained weights: {cfg.MODEL.TEACHER_WEIGHTS}")
-            try:
-                # Load weight file
-                checkpoint = torch.load(cfg.MODEL.TEACHER_WEIGHTS, map_location='cpu')
-                
-                # Get state dictionary
-                try:
-                    state_dict = checkpoint['model']
-                except:
-                    state_dict = checkpoint.get('module', checkpoint)
-                
-                # Only load weights for visual encoder and text decoder
-                filtered_state_dict = {}
-                for key, value in state_dict.items():
-                    if key.startswith('visual_encoder') or key.startswith('text_decoder'):
-                        filtered_state_dict[key] = value
-                
-                # Load weights
-                msg = self.load_state_dict(filtered_state_dict, strict=False)
-                
-                # Filter weight loading information, only keep visual encoder and text decoder related information
-                filtered_msg = {
-                    'missing_keys': [k for k in msg.missing_keys if k=='visual_encoder' or k=='text_decoder'],
-                    'unexpected_keys': [k for k in msg.unexpected_keys if k=='visual_encoder' or k=='text_decoder']
-                }
-                self.logger.info(f"Weight loading information: {filtered_msg}")
-                self.logger.info("Pre-trained weights loaded successfully")
+        self.logger.info(f"Loading pre-trained weights: {cfg.MODEL.TEACHER_WEIGHTS}")
+        try:
+            checkpoint = torch.load(cfg.MODEL.TEACHER_WEIGHTS, map_location='cpu', weights_only=True)
             
-            except Exception as e:
-                self.logger.error(f"Error loading weights: {str(e)}")
-                import traceback
-                self.logger.error(traceback.format_exc())
-        else:
-            self.logger.info("No pre-trained weights specified, using random initialization")
-
-    def verify_weights(self):
-        """Verify weights are loaded correctly"""
-        # Check if key components are initialized
-        components = [
-            self.visual_encoder,
-            self.text_encoder,
-            self.fusion_encoder,
-            self.text_decoder
-        ]
+            # Get state dict
+            state_dict = checkpoint.get('model', checkpoint.get('module', checkpoint))
+            
+            model_state_dict = {}
+            missing_keys = []
+            
+            # Extract visual encoder and text decoder weights
+            for key, value in state_dict.items():
+                if key.startswith(('visual_encoder', 'text_decoder')):
+                    if key in self.state_dict():
+                        if self.state_dict()[key].shape == value.shape:
+                            model_state_dict[key] = value
+                        else:
+                            missing_keys.append(f"{key} (shape mismatch)")
+            
+            # Load weights
+            self.load_state_dict(model_state_dict, strict=False)
+            
+            self.logger.info(f"Successfully loaded {len(model_state_dict)} parameters")
+            self.logger.info("Pre-trained weights loaded successfully")
         
-        for component in components:
-            if component is None:
-                self.logger.error(f"Component {component.__class__.__name__} not properly initialized")
-                return False
-        
-        # Check if weights contain NaN or inf
-        for name, param in self.named_parameters():
-            if torch.isnan(param).any() or torch.isinf(param).any():
-                self.logger.error(f"Parameter {name} contains NaN or inf")
-                return False
-        
-        self.logger.info("Weight verification passed")
-        return True
+        except Exception as e:
+            self.logger.error(f"Error loading weights: {str(e)}")
     
-    # Add distillation related methods
+    # Distillation related methods
     def init_distill(self, config):
         """Initialize distillation model"""
         self.distill = config['distill']
@@ -283,8 +236,8 @@ class TeacherMPLUG(MPLUG):
         """Copy parameters to momentum model"""
         for model_pair in self.model_pairs:
             for param, param_m in zip(model_pair[0].parameters(), model_pair[1].parameters()):
-                param_m.data.copy_(param.data)  # Initialize
-                param_m.requires_grad = False  # Not updated through gradient
+                param_m.data.copy_(param.data)
+                param_m.requires_grad = False
                 
     @torch.no_grad()
     def _momentum_update(self):
@@ -292,3 +245,42 @@ class TeacherMPLUG(MPLUG):
         for model_pair in self.model_pairs:
             for param, param_m in zip(model_pair[0].parameters(), model_pair[1].parameters()):
                 param_m.data = param_m.data * self.momentum + param.data * (1. - self.momentum) 
+
+if __name__ == "__main__":
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Device used: {device}")
+    
+    transform = transforms.Compose([
+        transforms.Resize((cfg.MODEL.MPLUG.IMAGE_RES, cfg.MODEL.MPLUG.IMAGE_RES), 
+                          interpolation=str_to_pil_interp('bicubic')),
+        transforms.ToTensor(),
+        transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)
+    ])
+    
+    image_path = './base.jpg'
+    print(f"Loading image: {image_path}")
+    image = Image.open(image_path).convert('RGB')
+    image = transform(image).unsqueeze(0).to(device)
+    
+    print("Initializing TeacherMPLUG model...")
+    model = TeacherMPLUG()
+    model = model.to(device)
+    model.eval()
+    
+    print("Performing inference...")
+    with torch.no_grad():
+        topk_ids, topk_probs = model.beam_search(image, train=False, out_size=5)
+        
+        for i, (tensor_list, prob_list) in enumerate(zip(topk_ids, topk_probs)):
+            prob_value = prob_list[0] if isinstance(prob_list, list) and len(prob_list) > 0 else prob_list
+            
+            if hasattr(prob_value, 'item'):
+                prob_value = prob_value.item()
+            
+            print(f"\n===== Candidate description {i+1} =====")
+            
+            for j, tensor in enumerate(tensor_list):
+                if isinstance(tensor, torch.Tensor):
+                    token_ids = tensor.tolist()
+                    generated_caption = model.tokenizer.decode(token_ids, skip_special_tokens=True)
+                    print(f"  Sentence {j+1}: {generated_caption}") 

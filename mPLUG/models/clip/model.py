@@ -203,7 +203,7 @@ class Transformer(nn.Module):
     def forward(self, x: torch.Tensor, text_mask=None, use_checkpoint=True):
         for layer in self.resblocks:
             if use_checkpoint:
-                x = torch.utils.checkpoint.checkpoint(layer, x , text_mask)
+                x = torch.utils.checkpoint.checkpoint(layer, x, text_mask)
             else:
                 x = layer(x, text_mask = text_mask)
         return x

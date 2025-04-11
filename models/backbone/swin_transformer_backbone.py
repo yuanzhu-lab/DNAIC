@@ -593,7 +593,7 @@ class SwinTransformer(nn.Module):
         return x
     
     def load_weights(self, pretrained_model):
-        checkpoint = torch.load(pretrained_model, map_location='cpu')
+        checkpoint = torch.load(pretrained_model, map_location='cpu', weights_only=True)
         # print(checkpoint['patch_embed.proj.bias'])
         self.load_state_dict(checkpoint, strict=False)
 
