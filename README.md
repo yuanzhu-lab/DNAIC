@@ -82,7 +82,7 @@ The model can be trained on NVIDIA GPU with CUDA support or Apple Silicon with M
 | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- |
 | 79.7        | 63.2        | 48.5        | 36.9        | 27.9        | 58.0        | 122.6       |
 
-Download link: [DNAIC-base](https://pan.baidu.com/s/1Gi55PFgfP5iTI0B5KF4yow?pwd=rain)
+Download link: [DNAIC-base-0.2B](https://pan.baidu.com/s/1Gi55PFgfP5iTI0B5KF4yow?pwd=rain)
 
 ## Inference
 
