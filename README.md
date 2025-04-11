@@ -90,7 +90,7 @@ The model can be trained on NVIDIA GPU with CUDA support or Apple Silicon with M
 
    A Gradio-based web UI is also provided for users to perform inference through a graphical interface.
 
-   ```py
+   ```bash
    python webui.py
    ```
 
