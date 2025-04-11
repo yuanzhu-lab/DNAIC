@@ -50,7 +50,7 @@ Download link: [pretrained_models](https://pan.baidu.com/s/19h-6fc48hiyFZupPSf_v
 
 ## Training Process
 
-The model can be trained on NVIDIA GPU with CUDA support (recommended), while MPS (Apple Silicon) and CPU are not recommended, with training time of approximately 30 minutes per epoch on NVIDIA H20-200 GB GPU.
+The model can be trained on NVIDIA GPU with CUDA support (recommended), while MPS (Apple Silicon) and CPU are not recommended. On an NVIDIA H20-200GB GPU, each training epoch takes approximately 30 minutes.
 
 1. Environment Setup
 
@@ -77,11 +77,11 @@ The model can be trained on NVIDIA GPU with CUDA support (recommended), while MP
 
 ## Credits
 
-This project is based on the following open-source projects:
+This project is based on the following resources:
 
-- MSCOCO - the dataset
-- mPLUG - the teacher
-- EENAIC - the student
+- MSCOCO
+- mPLUG
+- EENAIC
 
 ## License
 
