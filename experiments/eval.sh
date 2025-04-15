@@ -1,1 +1,1 @@
-python eval.py --folder ./experiments/ --resume 20
+python eval.py --folder ./experiments/ --resume 160

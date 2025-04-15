@@ -112,7 +112,7 @@ MODEL:
 SOLVER:
   BASE_LR: 0.0005               # 0.0005
   TYPE: 'ADAM'                 # 'ADAM', 'SGD', 'RADAM'
-  MAX_EPOCH: 30
+  MAX_EPOCH: 200
   MAX_ITER: -1
   GRAD_CLIP: 0.1                # Norm:0.5 , Clamp:0.1
   GRAD_CLIP_TYPE: 'Clamp'       # 'Clamp'  , 'Norm'

@@ -15,7 +15,7 @@ import models
 import warnings
 warnings.filterwarnings("ignore")
 
-MODEL_PATH = "./experiments/snapshot/student_model_19.pth"  # Path to student model weights
+MODEL_PATH = "./experiments/snapshot/student_model_160.pth"  # Path to student model weights
 CONFIG_PATH = "./experiments/config.yml"  # Path to configuration file
 VOCAB_PATH = "./mscoco/txt/coco_vocabulary.txt"  # Path to vocabulary file
 EXAMPLE_IMAGE_PATH = "./base.jpg"  # Path to example image

@@ -50,7 +50,7 @@ Download link: [pretrained_models](https://pan.baidu.com/s/19h-6fc48hiyFZupPSf_v
 
 ## Training Process
 
-The model can be trained on NVIDIA GPU with CUDA support or Apple Silicon with MPS support (CPUs are not recommended).
+The model can be trained on NVIDIA GPU with CUDA support or Apple Silicon with MPS support (CPUs are not recommended). Training for 200 epochs takes approximately 20 hours on 8×A800-80GB GPUs.
 
 1. Environment Setup
 
@@ -78,9 +78,10 @@ The model can be trained on NVIDIA GPU with CUDA support or Apple Silicon with M
    - Image Captioning: BLEU, METEOR, ROUGE-L, CIDEr
    - Speed: Latency, SpeedUp
 
-| BLEU-1      | BLEU-2      | BLEU-3      | BLEU-4      | METEOR      | ROUGE-L     | CIDEr       |     
-| ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- |
-| 79.7        | 63.2        | 48.5        | 36.9        | 27.9        | 58.0        | 122.6       |
+|            | BLEU-1 | BLEU-2 | BLEU-3 | BLEU-4 | METEOR | ROUGE-L | CIDEr  |
+|------------|--------|--------|--------|--------|--------|----------|--------|
+| Without KD | 79.7   | 63.2   | 48.5   | 36.9   | 27.9   | 58.0     | 122.6  |
+| With KD    | 80.0   | 63.7   | 49.0   | 37.2   | 27.9   | 58.0     | 122.8  |
 
 Download link: [DNAIC-base-0.2B](https://pan.baidu.com/s/1Gi55PFgfP5iTI0B5KF4yow?pwd=rain)
 
