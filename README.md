@@ -50,7 +50,7 @@ Download link: [pretrained_models](https://pan.baidu.com/s/19h-6fc48hiyFZupPSf_v
 
 ## Training Process
 
-The model can be trained on NVIDIA GPU with CUDA support or Apple Silicon with MPS support (CPUs are not recommended). Training for 200 epochs takes approximately 20 hours on 8×A800-80GB GPUs.
+The model can be trained on NVIDIA GPU with CUDA support or Apple Silicon with MPS support (CPUs are not recommended).
 
 1. Environment Setup
 
