@@ -81,7 +81,7 @@ The model can be trained on NVIDIA GPU with CUDA support or Apple Silicon with M
 |            | BLEU-1 | BLEU-2 | BLEU-3 | BLEU-4 | METEOR | ROUGE-L | CIDEr  |
 |------------|--------|--------|--------|--------|--------|----------|--------|
 | EENAIC | 79.7   | 63.2   | 48.5   | 36.9   | 27.9   | 58.0     | 122.6  |
-| DNAIC | 80.0   | 63.7   | 49.0   | 37.2   | 27.9   | 58.0     | 122.8  |
+| DNAIC | 80.1   | 63.9   | 49.2   | 37.3   | 27.9   | 57.9     | 122.8  |
 
 Download link: [DNAIC-base-0.2B](https://pan.baidu.com/s/1Gi55PFgfP5iTI0B5KF4yow?pwd=rain)
 
