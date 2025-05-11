@@ -14,7 +14,7 @@
 ## Pipeline
 
 <div align='center'>
-    <img src='pipeline.pdf' width=100%>
+    <img src='pipeline.svg' width=100%>
 </div>
 
 ## Data Preparation
