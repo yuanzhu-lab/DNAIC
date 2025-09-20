@@ -7,8 +7,8 @@
 </div>
 
 <div align='center'>
-  <img src='https://img.shields.io/github/license/yuanzhu/DNAIC' alt='License'>
-  <img src='https://img.shields.io/github/contributors/yuanzhu/DNAIC' alt='Contributors'>
+  <img src='https://img.shields.io/github/license/rain4335/DNAIC' alt='License'>
+  <img src='https://img.shields.io/github/contributors/rain4335/DNAIC' alt='Contributors'>
 </div>
 
 ## Pipeline
